@@ -26,6 +26,10 @@ jobs:
           cp -rn $PUBSPEC_DIR/* .
           rm -rf temp_extract
 
+      - name: Fix CardThemeData error in code
+        run: |
+          sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
+
       - name: Set up Flutter (Compatible Version)
         uses: subosito/flutter-action@v2
         with:
@@ -42,4 +46,3 @@ jobs:
         with:
           name: release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
-
