@@ -17,33 +17,24 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Extract zip archive
-        run: macha_market_production_ready.zip
-
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.27.0'
           channel: 'stable'
 
-      - name: Install dependencies
+      - name: Recreate Android project files & Fix Settings
         run: |
-          cd macha_market
+          flutter create . --platforms=android --org=com.machamarket.macha_market
+          mkdir -p assets/images assets/icons
+          sed -i 's/minSdk = .*/minSdk = 23/' android/app/build.gradle
+          sed -i 's/minSdkVersion .*/minSdk = 23/' android/app/build.gradle
           flutter pub get
 
-      - name: Fix App Icon & minSdkVersion
-        run: |
-          cd macha_market/android/app
-          sed -i 's/minSdkVersion.*/minSdkVersion 23/' build.gradle || true
-          sed -i 's/flutter.minSdkVersion/23/' build.gradle || true
-          sed -i 's/android:icon="@mipmap\/ic_launcher"//g' src/main/AndroidManifest.xml || true
-
       - name: Build APK
-        run: |
-          cd macha_market
-          flutter build apk --release --no-tree-shake-icons
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: macha-market-apk
-          path: macha_market/build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
