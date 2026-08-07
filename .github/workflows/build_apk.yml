@@ -22,18 +22,13 @@ jobs:
       - name: Extract zip archive
         run: |
           unzip -o macha_market_production_ready.zip -d .
-          mkdir -p android/app
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: Recreate Android project files
-        run: |
-          flutter create . --project-name=macha_market --org=com.machamarket.macha_market
-
-      - name: Install dependencies
+      - name: Get dependencies
         run: flutter pub get
 
       - name: Build APK
@@ -44,3 +39,4 @@ jobs:
         with:
           name: release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
