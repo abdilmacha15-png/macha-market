@@ -21,7 +21,13 @@ jobs:
 
       - name: Extract zip archive
         run: |
-          unzip -o macha_market_production_ready.zip -d .
+          unzip -o macha_market_production_ready.zip -d extracted_app
+          # Kama zip imetengeneza subfolder, hamisha mafaili yote kaja root
+          if [ -d "extracted_app/macha_market_production_ready" ]; then
+            cp -r extracted_app/macha_market_production_ready/* .
+          else
+            cp -r extracted_app/* .
+          fi
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
