@@ -2,62 +2,45 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Extract zip archive & Create Firebase Config
-        run: 
-          unzip macha_market_production_ready.zip
-          echo "${{ secrets.GOOGLE_SERVICES_JSON }}" > macha_market/android/app/google-services.json
+      - name: Extract zip archive
+        run: |
+          unzip -o macha_market_production_ready.zip -d .
+          mkdir -p android/app
 
-      - uses: subosito/flutter-action@v2
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.0'
           channel: 'stable'
 
-      - name: Install dependencies
+      - name: Recreate Android project files
         run: |
-          cd macha_market
-          flutter pub get
+          flutter create . --project-name=macha_market --org=com.machamarket.macha_market
 
-      - name: Fix minSdkVersion & Create Missing Icons
-        run: |
-          cd macha_market/android/app
-          # Update minSdkVersion
-          sed -i 's/minSdkVersion.*/minSdkVersion = 23/' build.gradle
-          sed -i 's/minSdkVersion 21/minSdkVersion 23/' build.gradle
-          
-          # Fix missing launcher icons by creating dummy resources
-          mkdir -p src/main/res/mipmap-hdpi
-          mkdir -p src/main/res/mipmap-mdpi
-          mkdir -p src/main/res/mipmap-xhdpi
-          mkdir -p src/main/res/mipmap-xxhdpi
-          mkdir -p src/main/res/mipmap-xxxhdpi
-          
-          # Use default Android launch icon if missing
-          cp src/main/res/drawable/launch_background.xml src/main/res/mipmap-hdpi/ic_launcher.xml || true
-          sed -i 's/android:icon="@mipmap\/ic_launcher"/android:icon="@android:drawable\/sym_def_app_icon"/g' src/main/AndroidManifest.xml || true
+      - name: Install dependencies
+        run: flutter pub get
 
       - name: Build APK
-        run: |
-          cd macha_market
-          flutter build apk --release --no-tree-shake-icons
+        run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: macha-market-apk
-          path: macha_market/build/app/outputs/flutter-apk/app-release.apk
-
+          name: release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
