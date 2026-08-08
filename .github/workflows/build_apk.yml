@@ -21,7 +21,7 @@ jobs:
 
       - name: Extract zip archive and fix directory structure
         run: |
-          unzip -o macha_market_production_ready.zip -d temp_extract
+          unzip -o macha_market_final.zip -d temp_extract
           PUBSPEC_DIR=$(dirname $(find temp_extract -name "pubspec.yaml" -print -quit))
           cp -rn $PUBSPEC_DIR/* .
           rm -rf temp_extract
