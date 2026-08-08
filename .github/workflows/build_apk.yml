@@ -30,10 +30,18 @@ jobs:
         run: |
           sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
 
-      - name: Update minSdkVersion to 23 for Firebase
+      - name: Safely update minSdkVersion to 23
         run: |
-          sed -i 's/minSdkVersion [0-9]*/minSdkVersion 23/g' android/app/build.gradle || true
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/g' android/app/build.gradle || true
+          python3 -c "
+          path = 'android/app/build.gradle'
+          with open(path, 'r') as f:
+              content = f.read()
+          # Badilisha minSdkVersion yoyote au flutter.minSdkVersion kuwa 23
+          import re
+          content = re.sub(r'minSdkVersion\s+.*', 'minSdkVersion 23', content)
+          with open(path, 'w') as f:
+              f.write(content)
+          "
 
       - name: Set up Flutter (Compatible Version)
         uses: subosito/flutter-action@v2
@@ -51,4 +59,3 @@ jobs:
         with:
           name: release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
-
