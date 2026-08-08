@@ -42,6 +42,12 @@ jobs:
               f.write(content)
           "
 
+      - name: Create Keystore & Print Fingerprints
+        run: |
+          mkdir -p ~/.android
+          keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android
+
       - name: Set up Flutter (Compatible Version)
         uses: subosito/flutter-action@v2
         with:
@@ -52,10 +58,6 @@ jobs:
 
       - name: Build APK
         run: flutter build apk --release
-
-      - name: Print SHA Fingerprints
-        run: |
-          keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
