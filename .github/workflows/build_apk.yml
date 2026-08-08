@@ -26,9 +26,38 @@ jobs:
           cp -rn $PROJECT_DIR/* .
           rm -rf temp_extract
 
-      - name: Fix CardTheme Error
+      - name: Inject Fixes Into Extracted Files
         run: |
+          # 1. Rekebisha CardTheme
           sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
+
+          # 2. Ongeza updateUserRole kwenye auth_service.dart
+          cat << 'EOF' > fix_script.py
+          path = "lib/services/auth_service.dart"
+          with open(path, "r") as f:
+              lines = f.readlines()
+
+          method = """
+            Future<void> updateUserRole(String uid, String role, {String? shopName}) async {
+              try {
+                await _firestore.collection("users").doc(uid).update({
+                  "role": role,
+                  if (shopName != null) "shopName": shopName,
+                });
+              } catch (e) {}
+            }
+          """
+
+          # Tafuta bano la mwisho na uweke method kabla yake
+          for i in range(len(lines) - 1, -1, -1):
+              if "}" in lines[i]:
+                  lines.insert(i, method)
+                  break
+
+          with open(path, "w") as f:
+              f.writelines(lines)
+          EOF
+          python3 fix_script.py
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
