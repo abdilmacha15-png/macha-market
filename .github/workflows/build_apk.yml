@@ -36,12 +36,15 @@ jobs:
           path = 'android/app/build.gradle'
           with open(path, 'r') as f:
               content = f.read()
-          # Badilisha minSdkVersion yoyote au flutter.minSdkVersion kuwa 23
           import re
           content = re.sub(r'minSdkVersion\s+.*', 'minSdkVersion 23', content)
           with open(path, 'w') as f:
               f.write(content)
           "
+
+      - name: Print SHA Fingerprints
+        run: |
+          keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android
 
       - name: Set up Flutter (Compatible Version)
         uses: subosito/flutter-action@v2
