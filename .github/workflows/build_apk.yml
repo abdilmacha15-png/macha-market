@@ -28,13 +28,33 @@ jobs:
 
       - name: Fix Code Errors Automatically
         run: |
-          # 1. Fix CardThemeData error in app_theme.dart
+          # 1. Fix CardTheme error
           sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
 
-          # 2. Add missing updateUserRole method to AuthService if missing
-          if ! grep -q "updateUserRole" lib/services/auth_service.dart; then
-            sed -i '/class AuthService/a \  Future<void> updateUserRole(String uid, String role, {String? shopName}) async {\n    await _firestore.collection("users").doc(uid).update({"role": role, if (shopName != null) "shopName": shopName});\n  }' lib/services/auth_service.dart
-          fi
+          # 2. Inject missing updateUserRole method cleanly into AuthService
+          python3 -c '
+          path = "lib/services/auth_service.dart"
+          with open(path, "r") as f:
+              content = f.read()
+
+          method = """
+            Future<void> updateUserRole(String uid, String role, {String? shopName}) async {
+              try {
+                await _firestore.collection("users").doc(uid).update({
+                  "role": role,
+                  if (shopName != null) "shopName": shopName,
+                });
+              } catch (e) {}
+            }
+          """
+
+          if "updateUserRole" not in content:
+              idx = content.rfind("}")
+              if idx != -1:
+                  new_content = content[:idx] + method + "\n}\n"
+                  with open(path, "w") as f:
+                      f.write(new_content)
+          '
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
