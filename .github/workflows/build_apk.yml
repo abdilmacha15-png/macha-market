@@ -31,7 +31,18 @@ jobs:
           # 1. Rekebisha CardTheme
           sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
 
-          # 2. Ongeza updateUserRole kwa kutumia FirebaseFirestore.instance
+          # 2. Ongeza minSdkVersion kuwa 23 kwa ajili ya Firebase Auth
+          python3 -c '
+          import re
+          path = "android/app/build.gradle"
+          with open(path, "r") as f:
+              content = f.read()
+          content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
+          with open(path, "w") as f:
+              f.write(content)
+          '
+
+          # 3. Ongeza updateUserRole kwenye auth_service.dart
           cat << 'EOF' > fix_script.py
           path = "lib/services/auth_service.dart"
           with open(path, "r") as f:
