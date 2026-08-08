@@ -19,36 +19,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Extract zip archive and fix directory structure
+      - name: Extract Project ZIP
         run: |
           unzip -o macha_market_final.zip -d temp_extract
-          PUBSPEC_DIR=$(dirname $(find temp_extract -name "pubspec.yaml" -print -quit))
-          cp -rn $PUBSPEC_DIR/* .
+          PROJECT_DIR=$(find temp_extract -name "pubspec.yaml" -exec dirname {} \;)
+          cp -rn $PROJECT_DIR/* .
           rm -rf temp_extract
 
-      - name: Fix CardThemeData error in code
-        run: |
-          sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
-
-      - name: Safely update minSdkVersion to 23
-        run: |
-          python3 -c "
-          path = 'android/app/build.gradle'
-          with open(path, 'r') as f:
-              content = f.read()
-          import re
-          content = re.sub(r'minSdkVersion\s+.*', 'minSdkVersion 23', content)
-          with open(path, 'w') as f:
-              f.write(content)
-          "
-
-      - name: Create Keystore & Print Fingerprints
-        run: |
-          mkdir -p ~/.android
-          keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android
-
-      - name: Set up Flutter (Compatible Version)
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.2'
@@ -59,7 +37,7 @@ jobs:
       - name: Build APK
         run: flutter build apk --release
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
