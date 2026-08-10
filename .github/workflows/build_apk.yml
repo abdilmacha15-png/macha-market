@@ -19,36 +19,39 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Extract Project ZIP
+      - name: Extract Branded UI ZIP
         run: |
-          unzip -o macha_market_final.zip -d temp_extract
+          unzip -o macha_market_branded_ui.zip -d temp_extract
           PROJECT_DIR=$(find temp_extract -name "pubspec.yaml" -exec dirname {} \;)
           cp -rn $PROJECT_DIR/* .
           rm -rf temp_extract
 
       - name: Inject Fixes Into Extracted Files
         run: |
-          # 1. Rekebisha CardTheme
+          # 1. Rekebisha CardTheme kama ipo
           sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
 
-          # 2. Ongeza minSdkVersion kuwa 23 kwa ajili ya Firebase Auth
+          # 2. Ongeza minSdkVersion kuwa 23
           python3 -c '
-          import re
+          import re, os
           path = "android/app/build.gradle"
-          with open(path, "r") as f:
-              content = f.read()
-          content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
-          with open(path, "w") as f:
-              f.write(content)
-          '
+          if os.path.exists(path):
+              with open(path, "r") as f:
+                  content = f.read()
+              content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
+              with open(path, "w") as f:
+                  f.write(content)
+          ' || true
 
-          # 3. Ongeza updateUserRole kwenye auth_service.dart
+          # 3. Ongeza updateUserRole
           cat << 'EOF' > fix_script.py
+          import os
           path = "lib/services/auth_service.dart"
-          with open(path, "r") as f:
-              lines = f.readlines()
-
-          method = """
+          if os.path.exists(path):
+              try:
+                  with open(path, "r") as f:
+                      lines = f.readlines()
+                  method = """
             Future<void> updateUserRole(String uid, String role, {String? shopName}) async {
               try {
                 await FirebaseFirestore.instance.collection("users").doc(uid).update({
@@ -58,16 +61,17 @@ jobs:
               } catch (e) {}
             }
           """
-
-          for i in range(len(lines) - 1, -1, -1):
-              if "}" in lines[i]:
-                  lines.insert(i, method)
-                  break
-
-          with open(path, "w") as f:
-              f.writelines(lines)
+                  if not any("updateUserRole" in line for line in lines):
+                      for i in range(len(lines) - 1, -1, -1):
+                          if "}" in lines[i]:
+                              lines.insert(i, method)
+                              break
+                      with open(path, "w") as f:
+                          f.writelines(lines)
+              except Exception as e:
+                  pass
           EOF
-          python3 fix_script.py
+          python3 fix_script.py || true
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
