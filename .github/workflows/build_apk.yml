@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -10,90 +10,65 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Java 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
-
-      - name: Extract Branded UI ZIP
-        run: |
-          unzip -o macha_market_branded_ui.zip -d temp_extract
-          PROJECT_DIR=$(find temp_extract -name "pubspec.yaml" -exec dirname {} \;)
-          cp -rn $PROJECT_DIR/* .
-          rm -rf temp_extract
-
-      - name: Inject Fixes Into Extracted Files
-        run: |
-          # 1. Rekebisha CardTheme
-          sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
-
-          # 2. Tengeneza script ya kuweka marekebisho yote
-          cat << 'EOF' > fix_all.py
-          import re, os
-
-          # A. Rekebisha minSdkVersion
-          gpath = "android/app/build.gradle"
-          if os.path.exists(gpath):
-              with open(gpath, "r") as f:
-                  c = f.read()
-              c = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", c)
-              with open(gpath, "w") as f:
-                  f.write(c)
-
-          # B. Ongeza updateUserRole kwenye AuthService
-          apath = "lib/services/auth_service.dart"
-          if os.path.exists(apath):
-              with open(apath, "r") as f:
-                  c = f.read()
-              if "updateUserRole" not in c:
-                  idx = c.rfind("}")
-                  if idx != -1:
-                      method = """
-            Future<void> updateUserRole(String uid, String role, {String? shopName}) async {
-              try {
-                await FirebaseFirestore.instance.collection("users").doc(uid).update({
-                  "role": role,
-                  if (shopName != null) "shopName": shopName,
-                });
-              } catch (e) {}
-            }
-          """
-                      c = c[:idx] + method + c[idx:]
-                      with open(apath, "w") as f:
-                          f.write(c)
-
-          # C. Rekebisha home_page.dart kama kuna hitilafu ya updateUserRole
-          hpath = "lib/shared/pages/home_page.dart"
-          if os.path.exists(hpath):
-              with open(hpath, "r") as f:
-                  lines = f.readlines()
-              with open(hpath, "w") as f:
-                  for line in lines:
-                      if "updateUserRole" in line and "Future<void>" not in line:
-                          f.write("// " + line)
-                      else:
-                          f.write(line)
-          EOF
-
-          python3 fix_all.py
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.2'
+          flutter-version: '3.27.0'
+          channel: stable
+          cache: true
 
-      - name: Get dependencies
+      # Finds pubspec after unzip (nested folder or repo root)
+      - name: Locate Flutter project
+        id: proj
+        run: |
+          if [ -f pubspec.yaml ]; then
+            echo "dir=." >> $GITHUB_OUTPUT
+          elif [ -f macha_market_production/pubspec.yaml ]; then
+            echo "dir=macha_market_production" >> $GITHUB_OUTPUT
+          elif [ -f macha_work/macha_market_production_ready/macha_market_production/pubspec.yaml ]; then
+            echo "dir=macha_work/macha_market_production_ready/macha_market_production" >> $GITHUB_OUTPUT
+          else
+            DIR=$(find . -name pubspec.yaml -not -path '*/\.*' | head -1 | xargs dirname)
+            echo "dir=$DIR" >> $GITHUB_OUTPUT
+          fi
+          echo "Project dir: $(grep dir $GITHUB_OUTPUT)"
+
+      - name: Write google-services.json (from secret if set)
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: |
+          mkdir -p android/app
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+            echo "Wrote google-services.json from secret"
+          elif [ -f android/app/google-services.json ]; then
+            echo "Using committed google-services.json"
+          else
+            echo "::warning::Missing google-services.json — set secret GOOGLE_SERVICES_JSON"
+          fi
+
+      - name: Ensure Android platform
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: flutter create . --platforms=android --project-name macha_market
+
+      - name: flutter pub get
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: flutter pub get
 
-      - name: Build APK
-        run: flutter build apk --release
+      - name: Build release APK
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: flutter build apk --release --no-tree-shake-icons
 
-      - name: Upload APK Artifact
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: macha-market-apk
+          path: ${{ steps.proj.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
