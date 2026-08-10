@@ -31,61 +31,55 @@ jobs:
           # 1. Rekebisha CardTheme
           sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
 
-          # 2. Rekebisha minSdkVersion
-          python3 -c '
+          # 2. Tengeneza script ya kuweka marekebisho yote
+          cat << 'EOF' > fix_all.py
           import re, os
-          path = "android/app/build.gradle"
-          if os.path.exists(path):
-              with open(path, "r") as f:
-                  content = f.read()
-              content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
-              with open(path, "w") as f:
-                  f.write(content)
-          ' || true
 
-          # 3. Rekebisha AuthService au HomePage kuondoa/kurekebisha error ya updateUserRole
-          python3 -c '
-          import os
+          # A. Rekebisha minSdkVersion
+          gpath = "android/app/build.gradle"
+          if os.path.exists(gpath):
+              with open(gpath, "r") as f:
+                  c = f.read()
+              c = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", c)
+              with open(gpath, "w") as f:
+                  f.write(c)
 
-          # Njia A: Ongeza updateUserRole kwenye AuthService
-          auth_path = "lib/services/auth_service.dart"
-          if os.path.exists(auth_path):
-              with open(auth_path, "r") as f:
-                  content = f.read()
-              if "updateUserRole" not in content:
-                  # Insert before the last closing brace
-                  idx = content.rfind("}")
+          # B. Ongeza updateUserRole kwenye AuthService
+          apath = "lib/services/auth_service.dart"
+          if os.path.exists(apath):
+              with open(apath, "r") as f:
+                  c = f.read()
+              if "updateUserRole" not in c:
+                  idx = c.rfind("}")
                   if idx != -1:
                       method = """
-    Future<void> updateUserRole(String uid, String role, {String? shopName}) async {
-      try {
-        await FirebaseFirestore.instance.collection("users").doc(uid).update({
-          "role": role,
-          if (shopName != null) "shopName": shopName,
-        });
-      } catch (e) {}
-    }
-  """
-                      content = content[:idx] + method + content[idx:]
-                      with open(auth_path, "w") as f:
-                          f.write(content)
-                      print("Added updateUserRole to AuthService")
+            Future<void> updateUserRole(String uid, String role, {String? shopName}) async {
+              try {
+                await FirebaseFirestore.instance.collection("users").doc(uid).update({
+                  "role": role,
+                  if (shopName != null) "shopName": shopName,
+                });
+              } catch (e) {}
+            }
+          """
+                      c = c[:idx] + method + c[idx:]
+                      with open(apath, "w") as f:
+                          f.write(c)
 
-          # Njia B: Rekebisha call kwenye home_page.dart kama bado kuna shida
-          home_path = "lib/shared/pages/home_page.dart"
-          if os.path.exists(home_path):
-              with open(home_path, "r") as f:
+          # C. Rekebisha home_page.dart kama kuna hitilafu ya updateUserRole
+          hpath = "lib/shared/pages/home_page.dart"
+          if os.path.exists(hpath):
+              with open(hpath, "r") as f:
                   lines = f.readlines()
-              new_lines = []
-              for line in lines:
-                  if "updateUserRole" in line:
-                      new_lines.append("// " + line)
-                  else:
-                      new_lines.append(line)
-              with open(home_path, "w") as f:
-                  f.writelines(new_lines)
-              print("Commented out updateUserRole call in home_page.dart")
-          ' || true
+              with open(hpath, "w") as f:
+                  for line in lines:
+                      if "updateUserRole" in line and "Future<void>" not in line:
+                          f.write("// " + line)
+                      else:
+                          f.write(line)
+          EOF
+
+          python3 fix_all.py
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
