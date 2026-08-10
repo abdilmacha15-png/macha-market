@@ -68,13 +68,13 @@ jobs:
         working-directory: ${{ steps.proj.outputs.dir }}
         run: flutter create . --platforms=android --project-name macha_market
 
-      - name: Fix minSdkVersion & Code Issues
+      - name: Fix Code & Build Settings
         working-directory: ${{ steps.proj.outputs.dir }}
         run: |
           python3 -c '
           import re, os
 
-          # 1. minSdkVersion 23
+          # 1. Rekebisha minSdkVersion 23
           gpath = "android/app/build.gradle"
           if os.path.exists(gpath):
               with open(gpath, "r") as f:
@@ -83,27 +83,20 @@ jobs:
               with open(gpath, "w") as f:
                   f.write(c)
 
-          # 2. Ongeza updateUserRole kwenye AuthService
-          apath = "lib/services/auth_service.dart"
-          if os.path.exists(apath):
-              with open(apath, "r") as f:
-                  c = f.read()
-              if "updateUserRole" not in c:
-                  idx = c.rfind("}")
-                  if idx != -1:
-                      method = """
-            Future<void> updateUserRole(String uid, String role, {String? shopName}) async {
-              try {
-                await FirebaseFirestore.instance.collection("users").doc(uid).update({
-                  "role": role,
-                  if (shopName != null) "shopName": shopName,
-                });
-              } catch (e) {}
-            }
-          """
-                      c = c[:idx] + method + c[idx:]
-                      with open(apath, "w") as f:
-                          f.write(c)
+          # 2. Safisha updateUserRole katika mafaili yote ya lib/
+          if os.path.exists("lib"):
+              for root, dirs, files in os.walk("lib"):
+                  for file in files:
+                      if file.endswith(".dart"):
+                          fpath = os.path.join(root, file)
+                          with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                              content = f.read()
+                          if "updateUserRole" in content:
+                              # Ondoa wito wa updateUserRole(...) ulioko kwenye mistari mingi
+                              content = re.sub(r"await\s+ref\.read\(authServiceProvider\)\.updateUserRole\([^;]*\);", "// removed updateUserRole", content, flags=re.DOTALL)
+                              content = re.sub(r"ref\.read\(authServiceProvider\)\.updateUserRole\([^;]*\);", "// removed updateUserRole", content, flags=re.DOTALL)
+                              with open(fpath, "w", encoding="utf-8") as f:
+                                  f.write(content)
           ' || true
 
       - name: flutter pub get
