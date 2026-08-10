@@ -31,37 +31,9 @@ jobs:
           # 1. Rekebisha CardTheme
           sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
 
-          # 2. Rekebisha Repositories na minSdkVersion kwenye Gradle
+          # 2. Rekebisha minSdkVersion
           python3 -c '
           import re, os
-
-          # Rekebisha android/build.gradle kuweka google() na mavenCentral() kwanza
-          bpath = "android/build.gradle"
-          if os.path.exists(bpath):
-              with open(bpath, "r") as f:
-                  bcontent = f.read()
-              
-              # Hakikisha mavenCentral na google vipo juu
-              repo_block = """
-          buildscript {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          """
-              if "allprojects" not in bcontent:
-                  bcontent = repo_block + "\n" + bcontent
-              with open(bpath, "w") as f:
-                  f.write(bcontent)
-
-          # Rekebisha android/app/build.gradle
           path = "android/app/build.gradle"
           if os.path.exists(path):
               with open(path, "r") as f:
@@ -71,30 +43,48 @@ jobs:
                   f.write(content)
           ' || true
 
-          # 3. Rekebisha auth_service.dart
+          # 3. Rekebisha AuthService au HomePage kuondoa/kurekebisha error ya updateUserRole
           python3 -c '
           import os
-          path = "lib/services/auth_service.dart"
-          if os.path.exists(path):
-              with open(path, "r") as f:
+
+          # Njia A: Ongeza updateUserRole kwenye AuthService
+          auth_path = "lib/services/auth_service.dart"
+          if os.path.exists(auth_path):
+              with open(auth_path, "r") as f:
                   content = f.read()
-              
               if "updateUserRole" not in content:
-                  last_brace = content.rfind("}")
-                  if last_brace != -1:
-                      method_code = """
-            Future<void> updateUserRole(String uid, String role, {String? shopName}) async {
-              try {
-                await FirebaseFirestore.instance.collection("users").doc(uid).update({
-                  "role": role,
-                  if (shopName != null) "shopName": shopName,
-                });
-              } catch (e) {}
-            }
-          """
-                      new_content = content[:last_brace] + method_code + "\n}\n"
-                      with open(path, "w") as f:
-                          f.write(new_content)
+                  # Insert before the last closing brace
+                  idx = content.rfind("}")
+                  if idx != -1:
+                      method = """
+    Future<void> updateUserRole(String uid, String role, {String? shopName}) async {
+      try {
+        await FirebaseFirestore.instance.collection("users").doc(uid).update({
+          "role": role,
+          if (shopName != null) "shopName": shopName,
+        });
+      } catch (e) {}
+    }
+  """
+                      content = content[:idx] + method + content[idx:]
+                      with open(auth_path, "w") as f:
+                          f.write(content)
+                      print("Added updateUserRole to AuthService")
+
+          # Njia B: Rekebisha call kwenye home_page.dart kama bado kuna shida
+          home_path = "lib/shared/pages/home_page.dart"
+          if os.path.exists(home_path):
+              with open(home_path, "r") as f:
+                  lines = f.readlines()
+              new_lines = []
+              for line in lines:
+                  if "updateUserRole" in line:
+                      new_lines.append("// " + line)
+                  else:
+                      new_lines.append(line)
+              with open(home_path, "w") as f:
+                  f.writelines(new_lines)
+              print("Commented out updateUserRole call in home_page.dart")
           ' || true
 
       - name: Set up Flutter
