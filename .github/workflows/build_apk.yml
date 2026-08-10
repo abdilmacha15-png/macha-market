@@ -28,7 +28,7 @@ jobs:
 
       - name: Inject Fixes Into Extracted Files
         run: |
-          # 1. Rekebisha CardTheme kama ipo
+          # 1. Rekebisha CardTheme
           sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
 
           # 2. Ongeza minSdkVersion kuwa 23
@@ -43,15 +43,20 @@ jobs:
                   f.write(content)
           ' || true
 
-          # 3. Ongeza updateUserRole
-          cat << 'EOF' > fix_script.py
+          # 3. Rekebisha au ongeza updateUserRole ndani ya auth_service.dart kwa uhakika 100%
+          python3 -c '
           import os
+
           path = "lib/services/auth_service.dart"
           if os.path.exists(path):
-              try:
-                  with open(path, "r") as f:
-                      lines = f.readlines()
-                  method = """
+              with open(path, "r") as f:
+                  content = f.read()
+              
+              if "updateUserRole" not in content:
+                  # Tafuta bano la mwisho la class
+                  last_brace = content.rfind("}")
+                  if last_brace != -1:
+                      method_code = """
             Future<void> updateUserRole(String uid, String role, {String? shopName}) async {
               try {
                 await FirebaseFirestore.instance.collection("users").doc(uid).update({
@@ -61,17 +66,11 @@ jobs:
               } catch (e) {}
             }
           """
-                  if not any("updateUserRole" in line for line in lines):
-                      for i in range(len(lines) - 1, -1, -1):
-                          if "}" in lines[i]:
-                              lines.insert(i, method)
-                              break
+                      new_content = content[:last_brace] + method_code + "\n}\n"
                       with open(path, "w") as f:
-                          f.writelines(lines)
-              except Exception as e:
-                  pass
-          EOF
-          python3 fix_script.py || true
+                          f.write(new_content)
+                      print("updateUserRole added successfully!")
+          ' || true
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
