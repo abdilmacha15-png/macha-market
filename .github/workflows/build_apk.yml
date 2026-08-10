@@ -31,9 +31,37 @@ jobs:
           # 1. Rekebisha CardTheme
           sed -i 's/CardThemeData/CardTheme/g' lib/core/theme/app_theme.dart || true
 
-          # 2. Ongeza minSdkVersion kuwa 23
+          # 2. Rekebisha Repositories na minSdkVersion kwenye Gradle
           python3 -c '
           import re, os
+
+          # Rekebisha android/build.gradle kuweka google() na mavenCentral() kwanza
+          bpath = "android/build.gradle"
+          if os.path.exists(bpath):
+              with open(bpath, "r") as f:
+                  bcontent = f.read()
+              
+              # Hakikisha mavenCentral na google vipo juu
+              repo_block = """
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          """
+              if "allprojects" not in bcontent:
+                  bcontent = repo_block + "\n" + bcontent
+              with open(bpath, "w") as f:
+                  f.write(bcontent)
+
+          # Rekebisha android/app/build.gradle
           path = "android/app/build.gradle"
           if os.path.exists(path):
               with open(path, "r") as f:
@@ -43,17 +71,15 @@ jobs:
                   f.write(content)
           ' || true
 
-          # 3. Rekebisha au ongeza updateUserRole ndani ya auth_service.dart kwa uhakika 100%
+          # 3. Rekebisha auth_service.dart
           python3 -c '
           import os
-
           path = "lib/services/auth_service.dart"
           if os.path.exists(path):
               with open(path, "r") as f:
                   content = f.read()
               
               if "updateUserRole" not in content:
-                  # Tafuta bano la mwisho la class
                   last_brace = content.rfind("}")
                   if last_brace != -1:
                       method_code = """
@@ -69,7 +95,6 @@ jobs:
                       new_content = content[:last_brace] + method_code + "\n}\n"
                       with open(path, "w") as f:
                           f.write(new_content)
-                      print("updateUserRole added successfully!")
           ' || true
 
       - name: Set up Flutter
