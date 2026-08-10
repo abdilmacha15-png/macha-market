@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
@@ -19,6 +19,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Extract ZIP file
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -1)
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Extracting $ZIP_FILE..."
+            unzip -o "$ZIP_FILE" -d temp_extract
+            PROJECT_DIR=$(find temp_extract -name "pubspec.yaml" -exec dirname {} \;)
+            if [ -n "$PROJECT_DIR" ]; then
+              cp -rn $PROJECT_DIR/* .
+            fi
+            rm -rf temp_extract
+          fi
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -26,18 +39,14 @@ jobs:
           channel: stable
           cache: true
 
-      # Finds pubspec after unzip (nested folder or repo root)
       - name: Locate Flutter project
         id: proj
         run: |
           if [ -f pubspec.yaml ]; then
             echo "dir=." >> $GITHUB_OUTPUT
-          elif [ -f macha_market_production/pubspec.yaml ]; then
-            echo "dir=macha_market_production" >> $GITHUB_OUTPUT
-          elif [ -f macha_work/macha_market_production_ready/macha_market_production/pubspec.yaml ]; then
-            echo "dir=macha_work/macha_market_production_ready/macha_market_production" >> $GITHUB_OUTPUT
           else
-            DIR=$(find . -name pubspec.yaml -not -path '*/\.*' | head -1 | xargs dirname)
+            DIR=$(find . -name pubspec.yaml -not -path '*/\.*' | head -1 | xargs dirname 2>/dev/null || echo ".")
+            if [ -z "$DIR" ]; then DIR="."; fi
             echo "dir=$DIR" >> $GITHUB_OUTPUT
           fi
           echo "Project dir: $(grep dir $GITHUB_OUTPUT)"
@@ -58,6 +67,44 @@ jobs:
       - name: Ensure Android platform
         working-directory: ${{ steps.proj.outputs.dir }}
         run: flutter create . --platforms=android --project-name macha_market
+
+      - name: Fix minSdkVersion & Code Issues
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: |
+          python3 -c '
+          import re, os
+
+          # 1. minSdkVersion 23
+          gpath = "android/app/build.gradle"
+          if os.path.exists(gpath):
+              with open(gpath, "r") as f:
+                  c = f.read()
+              c = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", c)
+              with open(gpath, "w") as f:
+                  f.write(c)
+
+          # 2. Ongeza updateUserRole kwenye AuthService
+          apath = "lib/services/auth_service.dart"
+          if os.path.exists(apath):
+              with open(apath, "r") as f:
+                  c = f.read()
+              if "updateUserRole" not in c:
+                  idx = c.rfind("}")
+                  if idx != -1:
+                      method = """
+            Future<void> updateUserRole(String uid, String role, {String? shopName}) async {
+              try {
+                await FirebaseFirestore.instance.collection("users").doc(uid).update({
+                  "role": role,
+                  if (shopName != null) "shopName": shopName,
+                });
+              } catch (e) {}
+            }
+          """
+                      c = c[:idx] + method + c[idx:]
+                      with open(apath, "w") as f:
+                          f.write(c)
+          ' || true
 
       - name: flutter pub get
         working-directory: ${{ steps.proj.outputs.dir }}
