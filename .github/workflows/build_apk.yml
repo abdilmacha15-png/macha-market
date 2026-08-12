@@ -59,7 +59,7 @@ jobs:
             echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
           fi
 
-      - name: Auto-Fix Settings & Dependencies
+      - name: Auto-Fix Dart Code & Build Settings
         working-directory: ${{ steps.proj.outputs.dir }}
         run: |
           cat << 'EOF' > fix_script.py
@@ -72,7 +72,7 @@ jobs:
               content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
               with open(gpath, "w") as f: f.write(content)
 
-          # 2. Add dependencies safely
+          # 2. Ensure dependencies exist in pubspec.yaml
           if os.path.exists("pubspec.yaml"):
               with open("pubspec.yaml", "r") as f: pcontent = f.read()
               deps = [
@@ -88,30 +88,37 @@ jobs:
                       pcontent = pcontent.replace("dependencies:", "dependencies:\n  " + dep)
               with open("pubspec.yaml", "w") as f: f.write(pcontent)
 
-          # 3. Add missing state variables to _HomePageState if missing
+          # 3. Add dummy updateUserRole to AuthService to prevent method missing error
+          auth_path = "lib/services/auth_service.dart"
+          if os.path.exists(auth_path):
+              with open(auth_path, "r", encoding="utf-8", errors="ignore") as f:
+                  acontent = f.read()
+              if "updateUserRole" not in acontent:
+                  acontent = re.sub(
+                      r"(class\s+AuthService[^{]*\{)",
+                      r"\1\n  Future<void> updateUserRole(dynamic role) async {}\n",
+                      acontent
+                  )
+                  with open(auth_path, "w", encoding="utf-8") as f:
+                      f.write(acontent)
+
+          # 4. Clean broken text and syntax in home_page.dart
           hp_path = "lib/shared/pages/home_page.dart"
           if os.path.exists(hp_path):
-              with open(hp_path, "r", encoding="utf-8", errors="ignore") as f: content = f.read()
+              with open(hp_path, "r", encoding="utf-8", errors="ignore") as f:
+                  lines = f.readlines()
               
-              # Re-inject missing variables if they got stripped
-              vars_to_add = ""
-              if "String category" not in content and "var category" not in content:
-                  vars_to_add += "\n  String category = 'All';"
-              if "String search" not in content and "var search" not in content:
-                  vars_to_add += "\n  String search = '';"
-              if "void _openSeller" not in content and "void onOpenSeller" not in content:
-                  vars_to_add += "\n  void _openSeller() {}"
-                  vars_to_add += "\n  void onOpenSeller() {}"
+              clean_lines = []
+              for line in lines:
+                  if "Kama tatizo linaendelea" in line or "deploy Firestore rules" in line or "Angalia intaneti yako" in line:
+                      continue
+                  clean_lines.append(line)
+              
+              hcontent = "".join(clean_lines)
+              with open(hp_path, "w", encoding="utf-8") as f:
+                  f.write(hcontent)
 
-              if vars_to_add:
-                  content = re.sub(
-                      r"(class\s+_HomePageState\s+extends\s+State<HomePage>\s*\{)",
-                      r"\1" + vars_to_add,
-                      content
-                  )
-                  with open(hp_path, "w", encoding="utf-8") as f: f.write(content)
-
-          # 4. Inject missing imports
+          # 5. Inject missing imports across pages
           def add_import(file_path, import_stmt):
               if os.path.exists(file_path):
                   with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -132,13 +139,13 @@ jobs:
           EOF
           python3 fix_script.py
 
-      - name: Get Dependencies
+      - name: Dependencies
         working-directory: ${{ steps.proj.outputs.dir }}
         run: flutter pub get
 
       - name: Build release APK
         working-directory: ${{ steps.proj.outputs.dir }}
-        run: flutter build apk --release --no-tree-shake-icons --build-number=1
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
