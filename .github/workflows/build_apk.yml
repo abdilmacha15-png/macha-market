@@ -52,7 +52,7 @@ jobs:
           if [ -f pubspec.yaml ]; then
             echo "dir=." >> $GITHUB_OUTPUT
           else
-            DIR=$(find . -iname pubspec.yaml -not -path '*/\.*' | head -1 | xargs dirname 2>/dev/null || echo ".")
+            DIR=$(find . -iname pubspec.yaml -not -path '*/\.*' | head -1 | xargs dirname 2>/devnull || echo ".")
             if [ -z "$DIR" ]; then DIR="."; fi
             echo "dir=$DIR" >> $GITHUB_OUTPUT
           fi
@@ -89,43 +89,49 @@ jobs:
               with open(gpath, "w") as f:
                   f.write(c)
 
-          # 2. Ensure dependencies exist in pubspec.yaml
+          # 2. Add required dependencies to pubspec.yaml
           if os.path.exists("pubspec.yaml"):
               with open("pubspec.yaml", "r") as f:
                   pcontent = f.read()
-              deps_to_add = []
-              if "flutter_riverpod:" not in pcontent:
-                  deps_to_add.append("  flutter_riverpod: ^2.5.1")
-              if "firebase_storage:" not in pcontent:
-                  deps_to_add.append("  firebase_storage: ^12.0.0")
-              if deps_to_add:
-                  pcontent = pcontent.replace("dependencies:", "dependencies:\n" + "\n".join(deps_to_add))
+              deps = [
+                  ("flutter_riverpod:", "  flutter_riverpod: ^2.5.1"),
+                  ("firebase_storage:", "  firebase_storage: ^12.0.0"),
+                  ("go_router:", "  go_router: ^14.2.0"),
+                  ("cached_network_image:", "  cached_network_image: ^3.3.1"),
+                  ("google_fonts:", "  google_fonts: ^6.2.1")
+              ]
+              to_add = [line for key, line in deps if key not in pcontent]
+              if to_add:
+                  pcontent = pcontent.replace("dependencies:", "dependencies:\n" + "\n".join(to_add))
                   with open("pubspec.yaml", "w") as f:
                       f.write(pcontent)
 
-          # 3. Fix product_service.dart imports
-          ps_path = "lib/services/product_service.dart"
-          if os.path.exists(ps_path):
-              with open(ps_path, "r", encoding="utf-8", errors="ignore") as f:
-                  c = f.read()
-              if "firebase_storage" not in c:
-                  c = "import \"package:firebase_storage/firebase_storage.dart\";\n" + c
-                  with open(ps_path, "w", encoding="utf-8") as f:
-                      f.write(c)
+          # 3. Inject missing imports
+          def add_import(file_path, import_stmt):
+              if os.path.exists(file_path):
+                  with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                      c = f.read()
+                  if import_stmt not in c:
+                      c = import_stmt + "\n" + c
+                      with open(file_path, "w", encoding="utf-8") as f:
+                          f.write(c)
 
-          # 4. Fix product_detail_page.dart (Riverpod & State imports)
+          add_import("lib/shared/pages/seller_page.dart", "import \"package:go_router/go_router.dart\";")
+          add_import("lib/services/product_service.dart", "import \"package:firebase_storage/firebase_storage.dart\";")
+          add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import \"package:cached_network_image/cached_network_image.dart\";")
+          add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import \"package:flutter_riverpod/flutter_riverpod.dart\";")
+
+          # 4. Fix ProductDetailPage class signature
           pdp_path = "lib/features/products/presentation/pages/product_detail_page.dart"
           if os.path.exists(pdp_path):
               with open(pdp_path, "r", encoding="utf-8", errors="ignore") as f:
                   c = f.read()
-              if "flutter_riverpod" not in c:
-                  c = "import \"package:flutter_riverpod/flutter_riverpod.dart\";\n" + c
               c = re.sub(r"class\s+ProductDetailPage\s+extends\s+StatefulWidget", "class ProductDetailPage extends ConsumerStatefulWidget", c)
               c = re.sub(r"class\s+_ProductDetailPageState\s+extends\s+State<ProductDetailPage>", "class _ProductDetailPageState extends ConsumerState<ProductDetailPage>", c)
               with open(pdp_path, "w", encoding="utf-8") as f:
                   f.write(c)
 
-          # 5. Clean updateUserRole calls across lib/
+          # 5. Clean updateUserRole calls
           if os.path.exists("lib"):
               for root, dirs, files in os.walk("lib"):
                   for file in files:
