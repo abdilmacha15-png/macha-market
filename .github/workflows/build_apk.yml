@@ -123,7 +123,7 @@ jobs:
           add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import \"package:cached_network_image/cached_network_image.dart\";")
           add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import \"package:flutter_riverpod/flutter_riverpod.dart\";")
 
-          # 4. Fix ProductDetailPage class signature
+          # 4. Fix ProductDetailPage Riverpod class structure
           pdp_path = "lib/features/products/presentation/pages/product_detail_page.dart"
           if os.path.exists(pdp_path):
               with open(pdp_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -133,14 +133,12 @@ jobs:
               with open(pdp_path, "w", encoding="utf-8") as f:
                   f.write(c)
 
-          # 5. Fix syntax error in home_page.dart around Text widget & clean updateUserRole
+          # 5. Fix syntax error in home_page.dart and clean updateUserRole calls
           hp_path = "lib/shared/pages/home_page.dart"
           if os.path.exists(hp_path):
               with open(hp_path, "r", encoding="utf-8", errors="ignore") as f:
                   c = f.read()
-              # Rekebisha maandishi ya Text() yaliyoharibika
-              c = re.sub(r"Text\(\s*\"Kama tatizo linaendelea[^\"]*\",?\s*\)", "Text(\"Kama tatizo linaendelea, deploy Firestore rules.\")", c)
-              c = re.sub(r"Text\(\s*\'Kama tatizo linaendelea[^\']*',?\s*\)", "Text('Kama tatizo linaendelea, deploy Firestore rules.')", c)
+              c = re.sub(r"Text\(\s*[\"\']Kama tatizo linaendelea[^\n\"\']*[\"\']\s*,?\s*\)", "Text(\"Kama tatizo linaendelea, deploy Firestore rules.\")", c)
               with open(hp_path, "w", encoding="utf-8") as f:
                   f.write(c)
 
@@ -171,4 +169,3 @@ jobs:
         with:
           name: macha-market-apk
           path: ${{ steps.proj.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
-
