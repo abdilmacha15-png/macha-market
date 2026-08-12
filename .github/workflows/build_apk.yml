@@ -77,7 +77,7 @@ jobs:
       - name: Auto-Fix Dart Code & Build Settings
         working-directory: ${{ steps.proj.outputs.dir }}
         run: |
-          python3 -c '
+          cat << 'EOF' > fix_script.py
           import re, os
 
           # 1. Update minSdkVersion to 23
@@ -117,11 +117,11 @@ jobs:
                       with open(file_path, "w", encoding="utf-8") as f:
                           f.write(c)
 
-          add_import("lib/shared/pages/seller_page.dart", "import \"package:go_router/go_router.dart\";")
-          add_import("lib/shared/pages/seller_page.dart", "import \"package:image_picker/image_picker.dart\";")
-          add_import("lib/services/product_service.dart", "import \"package:firebase_storage/firebase_storage.dart\";")
-          add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import \"package:cached_network_image/cached_network_image.dart\";")
-          add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import \"package:flutter_riverpod/flutter_riverpod.dart\";")
+          add_import("lib/shared/pages/seller_page.dart", "import 'package:go_router/go_router.dart';")
+          add_import("lib/shared/pages/seller_page.dart", "import 'package:image_picker/image_picker.dart';")
+          add_import("lib/services/product_service.dart", "import 'package:firebase_storage/firebase_storage.dart';")
+          add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import 'package:cached_network_image/cached_network_image.dart';")
+          add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import 'package:flutter_riverpod/flutter_riverpod.dart';")
 
           # 4. Fix ProductDetailPage Riverpod class structure
           pdp_path = "lib/features/products/presentation/pages/product_detail_page.dart"
@@ -133,15 +133,7 @@ jobs:
               with open(pdp_path, "w", encoding="utf-8") as f:
                   f.write(c)
 
-          # 5. Fix syntax error in home_page.dart and clean updateUserRole calls
-          hp_path = "lib/shared/pages/home_page.dart"
-          if os.path.exists(hp_path):
-              with open(hp_path, "r", encoding="utf-8", errors="ignore") as f:
-                  c = f.read()
-              c = re.sub(r"Text\(\s*[\"\']Kama tatizo linaendelea[^\n\"\']*[\"\']\s*,?\s*\)", "Text(\"Kama tatizo linaendelea, deploy Firestore rules.\")", c)
-              with open(hp_path, "w", encoding="utf-8") as f:
-                  f.write(c)
-
+          # 5. Clean updateUserRole calls across lib/
           if os.path.exists("lib"):
               for root, dirs, files in os.walk("lib"):
                   for file in files:
@@ -154,7 +146,8 @@ jobs:
                               content = re.sub(r"ref\.read\(authServiceProvider\)\.updateUserRole\([^;]*\);", "// removed updateUserRole", content, flags=re.DOTALL)
                               with open(fpath, "w", encoding="utf-8") as f:
                                   f.write(content)
-          ' || true
+          EOF
+          python3 fix_script.py
 
       - name: Dependencies
         working-directory: ${{ steps.proj.outputs.dir }}
