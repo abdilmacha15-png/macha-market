@@ -98,7 +98,8 @@ jobs:
                   ("firebase_storage:", "  firebase_storage: ^12.0.0"),
                   ("go_router:", "  go_router: ^14.2.0"),
                   ("cached_network_image:", "  cached_network_image: ^3.3.1"),
-                  ("google_fonts:", "  google_fonts: ^6.2.1")
+                  ("google_fonts:", "  google_fonts: ^6.2.1"),
+                  ("image_picker:", "  image_picker: ^1.1.2")
               ]
               to_add = [line for key, line in deps if key not in pcontent]
               if to_add:
@@ -117,6 +118,7 @@ jobs:
                           f.write(c)
 
           add_import("lib/shared/pages/seller_page.dart", "import \"package:go_router/go_router.dart\";")
+          add_import("lib/shared/pages/seller_page.dart", "import \"package:image_picker/image_picker.dart\";")
           add_import("lib/services/product_service.dart", "import \"package:firebase_storage/firebase_storage.dart\";")
           add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import \"package:cached_network_image/cached_network_image.dart\";")
           add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import \"package:flutter_riverpod/flutter_riverpod.dart\";")
@@ -131,7 +133,17 @@ jobs:
               with open(pdp_path, "w", encoding="utf-8") as f:
                   f.write(c)
 
-          # 5. Clean updateUserRole calls
+          # 5. Fix syntax error in home_page.dart around Text widget & clean updateUserRole
+          hp_path = "lib/shared/pages/home_page.dart"
+          if os.path.exists(hp_path):
+              with open(hp_path, "r", encoding="utf-8", errors="ignore") as f:
+                  c = f.read()
+              # Rekebisha maandishi ya Text() yaliyoharibika
+              c = re.sub(r"Text\(\s*\"Kama tatizo linaendelea[^\"]*\",?\s*\)", "Text(\"Kama tatizo linaendelea, deploy Firestore rules.\")", c)
+              c = re.sub(r"Text\(\s*\'Kama tatizo linaendelea[^\']*',?\s*\)", "Text('Kama tatizo linaendelea, deploy Firestore rules.')", c)
+              with open(hp_path, "w", encoding="utf-8") as f:
+                  f.write(c)
+
           if os.path.exists("lib"):
               for root, dirs, files in os.walk("lib"):
                   for file in files:
@@ -159,3 +171,4 @@ jobs:
         with:
           name: macha-market-apk
           path: ${{ steps.proj.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
+
