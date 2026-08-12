@@ -59,7 +59,7 @@ jobs:
             echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
           fi
 
-      - name: Auto-Fix Dart Code & Build Settings
+      - name: Auto-Fix Settings & Dependencies
         working-directory: ${{ steps.proj.outputs.dir }}
         run: |
           cat << 'EOF' > fix_script.py
@@ -72,16 +72,46 @@ jobs:
               content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
               with open(gpath, "w") as f: f.write(content)
 
-          # 2. Add dependencies
+          # 2. Add dependencies safely
           if os.path.exists("pubspec.yaml"):
               with open("pubspec.yaml", "r") as f: pcontent = f.read()
-              deps = ["flutter_riverpod: ^2.5.1", "firebase_storage: ^12.0.0", "go_router: ^14.2.0", "equatable: ^2.0.5", "image_picker: ^1.1.2", "cached_network_image: ^3.3.1"]
+              deps = [
+                  "flutter_riverpod: ^2.5.1",
+                  "firebase_storage: ^12.0.0",
+                  "go_router: ^14.2.0",
+                  "equatable: ^2.0.5",
+                  "image_picker: ^1.1.2",
+                  "cached_network_image: ^3.3.1"
+              ]
               for dep in deps:
                   if dep.split(":")[0] not in pcontent:
                       pcontent = pcontent.replace("dependencies:", "dependencies:\n  " + dep)
               with open("pubspec.yaml", "w") as f: f.write(pcontent)
 
-          # 3. Inject missing imports
+          # 3. Add missing state variables to _HomePageState if missing
+          hp_path = "lib/shared/pages/home_page.dart"
+          if os.path.exists(hp_path):
+              with open(hp_path, "r", encoding="utf-8", errors="ignore") as f: content = f.read()
+              
+              # Re-inject missing variables if they got stripped
+              vars_to_add = ""
+              if "String category" not in content and "var category" not in content:
+                  vars_to_add += "\n  String category = 'All';"
+              if "String search" not in content and "var search" not in content:
+                  vars_to_add += "\n  String search = '';"
+              if "void _openSeller" not in content and "void onOpenSeller" not in content:
+                  vars_to_add += "\n  void _openSeller() {}"
+                  vars_to_add += "\n  void onOpenSeller() {}"
+
+              if vars_to_add:
+                  content = re.sub(
+                      r"(class\s+_HomePageState\s+extends\s+State<HomePage>\s*\{)",
+                      r"\1" + vars_to_add,
+                      content
+                  )
+                  with open(hp_path, "w", encoding="utf-8") as f: f.write(content)
+
+          # 4. Inject missing imports
           def add_import(file_path, import_stmt):
               if os.path.exists(file_path):
                   with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -99,22 +129,16 @@ jobs:
           add_import("lib/features/products/domain/entities/product_entity.dart", "import 'package:equatable/equatable.dart';")
           add_import("lib/features/auth/domain/entities/user_entity.dart", "import 'package:equatable/equatable.dart';")
 
-          # 4. Clean up home_page.dart syntax
-          hp_path = "lib/shared/pages/home_page.dart"
-          if os.path.exists(hp_path):
-              with open(hp_path, "r", encoding="utf-8", errors="ignore") as f: content = f.read()
-              content = re.sub(r"Text\s*\([\s\S]*?Kama tatizo[\s\S]*?\),", "Text('Tatizo la mtandao.'),", content)
-              with open(hp_path, "w", encoding="utf-8") as f: f.write(content)
           EOF
           python3 fix_script.py
 
-      - name: Dependencies
+      - name: Get Dependencies
         working-directory: ${{ steps.proj.outputs.dir }}
         run: flutter pub get
 
       - name: Build release APK
         working-directory: ${{ steps.proj.outputs.dir }}
-        run: flutter build apk --release --no-tree-shake-icons
+        run: flutter build apk --release --no-tree-shake-icons --build-number=1
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
