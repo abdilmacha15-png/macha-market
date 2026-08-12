@@ -74,13 +74,13 @@ jobs:
         working-directory: ${{ steps.proj.outputs.dir }}
         run: flutter create . --platforms=android --project-name macha_market
 
-      - name: Fix minSdkVersion & Code Errors
+      - name: Auto-Fix Dart Code & Build Settings
         working-directory: ${{ steps.proj.outputs.dir }}
         run: |
           python3 -c '
           import re, os
 
-          # 1. Weka minSdkVersion 23 kwa ajili ya Firebase Auth
+          # 1. Update minSdkVersion to 23
           gpath = "android/app/build.gradle"
           if os.path.exists(gpath):
               with open(gpath, "r") as f:
@@ -89,7 +89,43 @@ jobs:
               with open(gpath, "w") as f:
                   f.write(c)
 
-          # 2. Rekebisha error ya updateUserRole
+          # 2. Ensure dependencies exist in pubspec.yaml
+          if os.path.exists("pubspec.yaml"):
+              with open("pubspec.yaml", "r") as f:
+                  pcontent = f.read()
+              deps_to_add = []
+              if "flutter_riverpod:" not in pcontent:
+                  deps_to_add.append("  flutter_riverpod: ^2.5.1")
+              if "firebase_storage:" not in pcontent:
+                  deps_to_add.append("  firebase_storage: ^12.0.0")
+              if deps_to_add:
+                  pcontent = pcontent.replace("dependencies:", "dependencies:\n" + "\n".join(deps_to_add))
+                  with open("pubspec.yaml", "w") as f:
+                      f.write(pcontent)
+
+          # 3. Fix product_service.dart imports
+          ps_path = "lib/services/product_service.dart"
+          if os.path.exists(ps_path):
+              with open(ps_path, "r", encoding="utf-8", errors="ignore") as f:
+                  c = f.read()
+              if "firebase_storage" not in c:
+                  c = "import \"package:firebase_storage/firebase_storage.dart\";\n" + c
+                  with open(ps_path, "w", encoding="utf-8") as f:
+                      f.write(c)
+
+          # 4. Fix product_detail_page.dart (Riverpod & State imports)
+          pdp_path = "lib/features/products/presentation/pages/product_detail_page.dart"
+          if os.path.exists(pdp_path):
+              with open(pdp_path, "r", encoding="utf-8", errors="ignore") as f:
+                  c = f.read()
+              if "flutter_riverpod" not in c:
+                  c = "import \"package:flutter_riverpod/flutter_riverpod.dart\";\n" + c
+              c = re.sub(r"class\s+ProductDetailPage\s+extends\s+StatefulWidget", "class ProductDetailPage extends ConsumerStatefulWidget", c)
+              c = re.sub(r"class\s+_ProductDetailPageState\s+extends\s+State<ProductDetailPage>", "class _ProductDetailPageState extends ConsumerState<ProductDetailPage>", c)
+              with open(pdp_path, "w", encoding="utf-8") as f:
+                  f.write(c)
+
+          # 5. Clean updateUserRole calls across lib/
           if os.path.exists("lib"):
               for root, dirs, files in os.walk("lib"):
                   for file in files:
