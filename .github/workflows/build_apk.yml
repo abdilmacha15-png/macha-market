@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -19,19 +19,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Extract ZIP file
-        run: |
-          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -1)
-          if [ -n "$ZIP_FILE" ]; then
-            echo "Extracting $ZIP_FILE..."
-            unzip -o "$ZIP_FILE" -d temp_extract
-            PROJECT_DIR=$(find temp_extract -name "pubspec.yaml" -exec dirname {} \;)
-            if [ -n "$PROJECT_DIR" ]; then
-              cp -rn $PROJECT_DIR/* .
-            fi
-            rm -rf temp_extract
-          fi
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -39,67 +26,39 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Locate Flutter project
+      # Matches unzip path from macha_market_ui_fixed.zip
+      - name: Locate project
         id: proj
         run: |
           if [ -f pubspec.yaml ]; then
             echo "dir=." >> $GITHUB_OUTPUT
+          elif [ -f macha_market_production/pubspec.yaml ]; then
+            echo "dir=macha_market_production" >> $GITHUB_OUTPUT
+          elif [ -f macha_work/macha_market_production_ready/macha_market_production/pubspec.yaml ]; then
+            echo "dir=macha_work/macha_market_production_ready/macha_market_production" >> $GITHUB_OUTPUT
           else
-            DIR=$(find . -name pubspec.yaml -not -path '*/\.*' | head -1 | xargs dirname 2>/dev/null || echo ".")
-            if [ -z "$DIR" ]; then DIR="."; fi
+            DIR=$(find . -name pubspec.yaml -not -path '*/\.*' | head -1 | xargs dirname)
             echo "dir=$DIR" >> $GITHUB_OUTPUT
           fi
-          echo "Project dir: $(grep dir $GITHUB_OUTPUT)"
+          echo "Using: $(cat $GITHUB_OUTPUT)"
 
-      - name: Write google-services.json (from secret if set)
+      - name: google-services.json
         working-directory: ${{ steps.proj.outputs.dir }}
         run: |
           mkdir -p android/app
           if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
             echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
-            echo "Wrote google-services.json from secret"
           elif [ -f android/app/google-services.json ]; then
-            echo "Using committed google-services.json"
+            echo "Using existing google-services.json"
           else
-            echo "::warning::Missing google-services.json — set secret GOOGLE_SERVICES_JSON"
+            echo "::warning::Missing google-services.json"
           fi
 
-      - name: Ensure Android platform
+      - name: Flutter Android scaffold
         working-directory: ${{ steps.proj.outputs.dir }}
         run: flutter create . --platforms=android --project-name macha_market
 
-      - name: Fix Code & Build Settings
-        working-directory: ${{ steps.proj.outputs.dir }}
-        run: |
-          python3 -c '
-          import re, os
-
-          # 1. Rekebisha minSdkVersion 23
-          gpath = "android/app/build.gradle"
-          if os.path.exists(gpath):
-              with open(gpath, "r") as f:
-                  c = f.read()
-              c = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", c)
-              with open(gpath, "w") as f:
-                  f.write(c)
-
-          # 2. Safisha updateUserRole katika mafaili yote ya lib/
-          if os.path.exists("lib"):
-              for root, dirs, files in os.walk("lib"):
-                  for file in files:
-                      if file.endswith(".dart"):
-                          fpath = os.path.join(root, file)
-                          with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
-                              content = f.read()
-                          if "updateUserRole" in content:
-                              # Ondoa wito wa updateUserRole(...) ulioko kwenye mistari mingi
-                              content = re.sub(r"await\s+ref\.read\(authServiceProvider\)\.updateUserRole\([^;]*\);", "// removed updateUserRole", content, flags=re.DOTALL)
-                              content = re.sub(r"ref\.read\(authServiceProvider\)\.updateUserRole\([^;]*\);", "// removed updateUserRole", content, flags=re.DOTALL)
-                              with open(fpath, "w", encoding="utf-8") as f:
-                                  f.write(content)
-          ' || true
-
-      - name: flutter pub get
+      - name: Dependencies
         working-directory: ${{ steps.proj.outputs.dir }}
         run: flutter pub get
 
@@ -107,7 +66,7 @@ jobs:
         working-directory: ${{ steps.proj.outputs.dir }}
         run: flutter build apk --release --no-tree-shake-icons
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: macha-market-apk
