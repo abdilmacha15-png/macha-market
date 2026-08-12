@@ -23,21 +23,15 @@ jobs:
         run: |
           ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -1)
           if [ -n "$ZIP_FILE" ]; then
-            echo "Extracting $ZIP_FILE..."
             unzip -o "$ZIP_FILE" -d temp_extract
             PROJECT_DIR=$(find temp_extract -iname "pubspec.yaml" -exec dirname {} \;)
-            if [ -n "$PROJECT_DIR" ]; then
-              cp -rn $PROJECT_DIR/* .
-            fi
+            if [ -n "$PROJECT_DIR" ]; then cp -rn $PROJECT_DIR/* .; fi
             rm -rf temp_extract
           fi
 
       - name: Fix Pubspec Filename Case
         run: |
-          if [ -f "Pubspec.yaml" ]; then
-            mv Pubspec.yaml pubspec.yaml
-            echo "Renamed Pubspec.yaml to pubspec.yaml"
-          fi
+          if [ -f "Pubspec.yaml" ]; then mv Pubspec.yaml pubspec.yaml; fi
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -53,10 +47,8 @@ jobs:
             echo "dir=." >> $GITHUB_OUTPUT
           else
             DIR=$(find . -iname pubspec.yaml -not -path '*/\.*' | head -1 | xargs dirname 2>/devnull || echo ".")
-            if [ -z "$DIR" ]; then DIR="."; fi
             echo "dir=$DIR" >> $GITHUB_OUTPUT
           fi
-          echo "Using: $(cat $GITHUB_OUTPUT)"
 
       - name: google-services.json
         working-directory: ${{ steps.proj.outputs.dir }}
@@ -64,15 +56,7 @@ jobs:
           mkdir -p android/app
           if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
             echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
-          elif [ -f android/app/google-services.json ]; then
-            echo "Using existing google-services.json"
-          else
-            echo "::warning::Missing google-services.json"
           fi
-
-      - name: Flutter Android scaffold
-        working-directory: ${{ steps.proj.outputs.dir }}
-        run: flutter create . --platforms=android --project-name macha_market
 
       - name: Auto-Fix Dart Code & Build Settings
         working-directory: ${{ steps.proj.outputs.dir }}
@@ -83,72 +67,26 @@ jobs:
           # 1. Update minSdkVersion to 23
           gpath = "android/app/build.gradle"
           if os.path.exists(gpath):
-              with open(gpath, "r") as f:
-                  c = f.read()
-              c = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", c)
-              with open(gpath, "w") as f:
-                  f.write(c)
+              with open(gpath, "r") as f: content = f.read()
+              content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
+              with open(gpath, "w") as f: f.write(content)
 
-          # 2. Add required dependencies to pubspec.yaml
+          # 2. Add dependencies
           if os.path.exists("pubspec.yaml"):
-              with open("pubspec.yaml", "r") as f:
-                  pcontent = f.read()
-              deps = [
-                  ("flutter_riverpod:", "  flutter_riverpod: ^2.5.1"),
-                  ("firebase_storage:", "  firebase_storage: ^12.0.0"),
-                  ("go_router:", "  go_router: ^14.2.0"),
-                  ("cached_network_image:", "  cached_network_image: ^3.3.1"),
-                  ("google_fonts:", "  google_fonts: ^6.2.1"),
-                  ("image_picker:", "  image_picker: ^1.1.2"),
-                  ("equatable:", "  equatable: ^2.0.5")
-              ]
-              to_add = [line for key, line in deps if key not in pcontent]
-              if to_add:
-                  pcontent = pcontent.replace("dependencies:", "dependencies:\n" + "\n".join(to_add))
-                  with open("pubspec.yaml", "w") as f:
-                      f.write(pcontent)
+              with open("pubspec.yaml", "r") as f: pcontent = f.read()
+              deps = ["flutter_riverpod: ^2.5.1", "firebase_storage: ^12.0.0", "go_router: ^14.2.0", "equatable: ^2.0.5"]
+              for dep in deps:
+                  if dep.split(":")[0] not in pcontent:
+                      pcontent = pcontent.replace("dependencies:", "dependencies:\n  " + dep)
+              with open("pubspec.yaml", "w") as f: f.write(pcontent)
 
-          # 3. Inject missing imports
-          def add_import(file_path, import_stmt):
-              if os.path.exists(file_path):
-                  with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                      c = f.read()
-                  if import_stmt not in c:
-                      c = import_stmt + "\n" + c
-                      with open(file_path, "w", encoding="utf-8") as f:
-                          f.write(c)
-
-          add_import("lib/shared/pages/seller_page.dart", "import 'package:go_router/go_router.dart';")
-          add_import("lib/shared/pages/seller_page.dart", "import 'package:image_picker/image_picker.dart';")
-          add_import("lib/services/product_service.dart", "import 'package:firebase_storage/firebase_storage.dart';")
-          add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import 'package:cached_network_image/cached_network_image.dart';")
-          add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import 'package:flutter_riverpod/flutter_riverpod.dart';")
-          add_import("lib/features/products/domain/entities/product_entity.dart", "import 'package:equatable/equatable.dart';")
-          add_import("lib/features/auth/domain/entities/user_entity.dart", "import 'package:equatable/equatable.dart';")
-
-          # 4. Fix ProductDetailPage Riverpod class structure
-          pdp_path = "lib/features/products/presentation/pages/product_detail_page.dart"
-          if os.path.exists(pdp_path):
-              with open(pdp_path, "r", encoding="utf-8", errors="ignore") as f:
-                  c = f.read()
-              c = re.sub(r"class\s+ProductDetailPage\s+extends\s+StatefulWidget", "class ProductDetailPage extends ConsumerStatefulWidget", c)
-              c = re.sub(r"class\s+_ProductDetailPageState\s+extends\s+State<ProductDetailPage>", "class _ProductDetailPageState extends ConsumerState<ProductDetailPage>", c)
-              with open(pdp_path, "w", encoding="utf-8") as f:
-                  f.write(c)
-
-          # 5. Clean updateUserRole calls across lib/
-          if os.path.exists("lib"):
-              for root, dirs, files in os.walk("lib"):
-                  for file in files:
-                      if file.endswith(".dart"):
-                          fpath = os.path.join(root, file)
-                          with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
-                              content = f.read()
-                          if "updateUserRole" in content:
-                              content = re.sub(r"await\s+ref\.read\(authServiceProvider\)\.updateUserRole\([^;]*\);", "// removed updateUserRole", content, flags=re.DOTALL)
-                              content = re.sub(r"ref\.read\(authServiceProvider\)\.updateUserRole\([^;]*\);", "// removed updateUserRole", content, flags=re.DOTALL)
-                              with open(fpath, "w", encoding="utf-8") as f:
-                                  f.write(content)
+          # 3. Clean up home_page.dart (Removing broken Text widgets)
+          hp_path = "lib/shared/pages/home_page.dart"
+          if os.path.exists(hp_path):
+              with open(hp_path, "r", encoding="utf-8", errors="ignore") as f: content = f.read()
+              # Hii regex inatafuta block yoyote ya Text(...) iliyoharibika na kuiondoa
+              content = re.sub(r"Text\s*\([\s\S]*?Kama tatizo[\s\S]*?\),", "Text('Tatizo la mtandao.'),", content)
+              with open(hp_path, "w", encoding="utf-8") as f: f.write(content)
           EOF
           python3 fix_script.py
 
@@ -165,3 +103,5 @@ jobs:
         with:
           name: macha-market-apk
           path: ${{ steps.proj.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
+EOF
+
