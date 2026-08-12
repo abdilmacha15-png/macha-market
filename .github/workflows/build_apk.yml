@@ -136,17 +136,7 @@ jobs:
               with open(pdp_path, "w", encoding="utf-8") as f:
                   f.write(c)
 
-          # 5. Fix syntax error in home_page.dart by replacing broken strings with valid Text widgets
-          hp_path = "lib/shared/pages/home_page.dart"
-          if os.path.exists(hp_path):
-              with open(hp_path, "r", encoding="utf-8", errors="ignore") as f:
-                  c = f.read()
-              # Safely rewrite broken string constructs
-              c = re.sub(r"Kama tatizo linaendelea[^\n;]*", "'Kama tatizo linaendelea, deploy Firestore rules.'", c)
-              with open(hp_path, "w", encoding="utf-8") as f:
-                  f.write(c)
-
-          # 6. Clean updateUserRole calls across lib/
+          # 5. Clean updateUserRole calls across lib/
           if os.path.exists("lib"):
               for root, dirs, files in os.walk("lib"):
                   for file in files:
