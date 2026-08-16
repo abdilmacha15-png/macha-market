@@ -1,4 +1,4 @@
-name: Build Macha Market APK
+Name: Build Macha Market APK
 
 on:
   push:
@@ -66,11 +66,18 @@ jobs:
           flutter pub get
 
       # 8. Analyze project
-      # Warnings/deprecations should NOT stop the APK build.
       - name: Analyze project
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           flutter analyze || true
+
+      # 8.5 Fix minSdkVersion for Firebase Auth
+      - name: Fix minSdkVersion to 23
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          sed -i 's/minSdkVersion.*/minSdkVersion 23/g' android/app/build.gradle || true
+          sed -i 's/minSdk =.*/minSdk = 23/g' android/app/build.gradle || true
+          sed -i 's/flutter.minSdkVersion/23/g' android/app/build.gradle || true
 
       # 9. Build APK
       - name: Build release APK
@@ -110,3 +117,4 @@ jobs:
           echo "✅ Dependencies installed" >> "$GITHUB_STEP_SUMMARY"
           echo "✅ Release APK built" >> "$GITHUB_STEP_SUMMARY"
           echo "✅ APK uploaded as workflow artifact" >> "$GITHUB_STEP_SUMMARY"
+
