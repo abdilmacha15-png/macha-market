@@ -1,8 +1,8 @@
-name: Build Android APK
+name: Build Macha Market APK
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Java 17
@@ -19,19 +19,18 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Extract ZIP file
+      - name: Unzip Macha Market project
         run: |
-          ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -1)
-          if [ -n "$ZIP_FILE" ]; then
-            unzip -o "$ZIP_FILE" -d temp_extract
-            PROJECT_DIR=$(find temp_extract -iname "pubspec.yaml" -exec dirname {} \;)
-            if [ -n "$PROJECT_DIR" ]; then cp -rn $PROJECT_DIR/* .; fi
-            rm -rf temp_extract
-          fi
+          unzip -o macha_market_compile_fix.zip -d extracted
 
-      - name: Fix Pubspec Filename Case
+          echo "Files after extraction:"
+          find extracted -maxdepth 3 -type f | head -100
+
+      - name: Find Flutter project
         run: |
-          if [ -f "Pubspec.yaml" ]; then mv Pubspec.yaml pubspec.yaml; fi
+          PROJECT_DIR=$(find extracted -name pubspec.yaml -type f -print -quit | xargs dirname)
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+          echo "Flutter project found at: $PROJECT_DIR"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -40,102 +39,24 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Locate project
-        id: proj
-        run: |
-          if [ -f pubspec.yaml ]; then
-            echo "dir=." >> $GITHUB_OUTPUT
-          else
-            DIR=$(find . -iname pubspec.yaml -not -path '*/\.*' | head -1 | xargs dirname 2>/devnull || echo ".")
-            if [ -z "$DIR" ]; then DIR="."; fi
-            echo "dir=$DIR" >> $GITHUB_OUTPUT
-          fi
+      - name: Flutter version
+        run: flutter --version
 
-      - name: google-services.json
-        working-directory: ${{ steps.proj.outputs.dir }}
-        run: |
-          mkdir -p android/app
-          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
-          fi
-
-      - name: Auto-Fix Dart Code & Build Settings
-        working-directory: ${{ steps.proj.outputs.dir }}
-        run: |
-          cat << 'EOF' > fix_script.py
-          import re, os
-
-          # 1. Update minSdkVersion to 23
-          gpath = "android/app/build.gradle"
-          if os.path.exists(gpath):
-              with open(gpath, "r") as f: content = f.read()
-              content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
-              with open(gpath, "w") as f: f.write(content)
-
-          # 2. Add dependencies safely
-          if os.path.exists("pubspec.yaml"):
-              with open("pubspec.yaml", "r") as f: pcontent = f.read()
-              deps = [
-                  "google_fonts: ^6.1.0",
-                  "flutter_riverpod: ^2.5.1",
-                  "firebase_storage: ^12.0.0",
-                  "go_router: ^14.2.0",
-                  "equatable: ^2.0.5",
-                  "image_picker: ^1.1.2",
-                  "cached_network_image: ^3.3.1"
-              ]
-              for dep in deps:
-                  dep_name = dep.split(":")[0]
-                  if dep_name not in pcontent:
-                      pcontent = pcontent.replace("dependencies:", "dependencies:\n  " + dep)
-              with open("pubspec.yaml", "w") as f: f.write(pcontent)
-
-          # 3. Add updateUserRole to AuthService
-          auth_path = "lib/services/auth_service.dart"
-          if os.path.exists(auth_path):
-              with open(auth_path, "r", encoding="utf-8", errors="ignore") as f:
-                  acontent = f.read()
-              if "updateUserRole" not in acontent:
-                  acontent = re.sub(
-                      r"(class\s+AuthService[^{]*\{)",
-                      r"\1\n  Future<void> updateUserRole(dynamic role) async {}\n",
-                      acontent
-                  )
-                  with open(auth_path, "w", encoding="utf-8") as f:
-                      f.write(acontent)
-
-          # 4. Fix empty Text() calls and imports in home_page.dart
-          hp_path = "lib/shared/pages/home_page.dart"
-          if os.path.exists(hp_path):
-              with open(hp_path, "r", encoding="utf-8", errors="ignore") as f:
-                  hcontent = f.read()
-              hcontent = re.sub(r"Text\(\s*\)", "Text('')", hcontent)
-              with open(hp_path, "w", encoding="utf-8") as f:
-                  f.write(hcontent)
-
-          # 5. Fix imports in app_theme.dart
-          theme_path = "lib/core/theme/app_theme.dart"
-          if os.path.exists(theme_path):
-              with open(theme_path, "r", encoding="utf-8", errors="ignore") as f:
-                  tcontent = f.read()
-              if "package:google_fonts/google_fonts.dart" not in tcontent:
-                  tcontent = "import 'package:google_fonts/google_fonts.dart';\n" + tcontent
-                  with open(theme_path, "w", encoding="utf-8") as f:
-                      f.write(tcontent)
-
-          EOF
-          python3 fix_script.py
-
-      - name: Get Dependencies
-        working-directory: ${{ steps.proj.outputs.dir }}
+      - name: Get dependencies
+        working-directory: ${{ env.PROJECT_DIR }}
         run: flutter pub get
 
+      - name: Analyze project
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: flutter analyze
+
       - name: Build release APK
-        working-directory: ${{ steps.proj.outputs.dir }}
+        working-directory: ${{ env.PROJECT_DIR }}
         run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: macha-market-apk
-          path: ${{ steps.proj.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
+          name: macha-market-release-apk
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
