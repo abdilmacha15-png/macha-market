@@ -12,38 +12,47 @@ jobs:
 
     steps:
 
+      # 1. Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      # UNZIP THE NEW PROJECT
-      - name: Unzip Macha Market
+      # 2. Find ZIP
+      - name: Find Macha Market ZIP
         shell: bash
         run: |
           set -e
 
-          ZIP_FILE="macha_market_storage_fix.zip"
+          echo "===== Repository files ====="
+          find . -maxdepth 3 -type f | sort | head -200
 
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: $ZIP_FILE not found"
+          ZIP_FILE=$(find . -maxdepth 2 -type f \
+            -iname "macha_market_storage_fix.zip" \
+            -print -quit)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: macha_market_storage_fix.zip not found"
             exit 1
           fi
+
+          echo "ZIP FOUND: $ZIP_FILE"
+
+          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
+
+      # 3. Unzip
+      - name: Unzip Macha Market
+        shell: bash
+        run: |
+          set -e
 
           rm -rf extracted
           mkdir -p extracted
 
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "===== EXTRACTED PROJECT ====="
-          find extracted -maxdepth 3 -name "pubspec.yaml" -print
+          echo "===== Extracted project ====="
+          find extracted -maxdepth 4 -name "pubspec.yaml" -print
 
-      # FIND pubspec.yaml
+      # 4. Find Flutter project
       - name: Find Flutter project
         shell: bash
         run: |
@@ -55,7 +64,7 @@ jobs:
             -print -quit)
 
           if [ -z "$PUBSPEC" ]; then
-            echo "ERROR: No Flutter project found"
+            echo "ERROR: No pubspec.yaml found"
             exit 1
           fi
 
@@ -64,9 +73,22 @@ jobs:
           echo "Flutter project:"
           echo "$PROJECT_DIR"
 
+          if [ ! -d "$PROJECT_DIR/android" ]; then
+            echo "ERROR: Android folder not found"
+            exit 1
+          fi
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      # FLUTTER
+      # 5. Java 17
+      # IMPORTANT: this comes AFTER the ZIP has been extracted
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # 6. Flutter
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -74,24 +96,32 @@ jobs:
           channel: stable
           cache: true
 
+      # 7. Flutter version
       - name: Flutter version
-        run: flutter --version
+        run: |
+          flutter --version
+          dart --version
+          java -version
 
-      # DEPENDENCIES
+      # 8. Dependencies
       - name: Flutter pub get
         working-directory: ${{ env.PROJECT_DIR }}
-        run: flutter pub get
+        run: |
+          flutter pub get
 
-      # FIX FIREBASE MIN SDK
+      # 9. Fix minSdk
       - name: Fix Android minSdkVersion
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
 
-          echo "===== BEFORE ====="
+          echo "===== BEFORE FIX ====="
+
           grep -R -n -E \
             "minSdkVersion|minSdk|flutter.minSdkVersion" \
             android || true
+
+          echo "===== APPLYING MIN SDK 23 ====="
 
           # Groovy Gradle
           find android -type f -name "*.gradle" -exec sed -i \
@@ -117,25 +147,26 @@ jobs:
           find android -type f -name "AndroidManifest.xml" -exec sed -i \
             -E 's/android:minSdkVersion="21"/android:minSdkVersion="23"/g' {} \;
 
-          echo "===== AFTER ====="
+          echo "===== AFTER FIX ====="
+
           grep -R -n -E \
             "minSdkVersion|minSdk|flutter.minSdkVersion" \
             android || true
 
-      # CLEAN
+      # 10. Clean
       - name: Flutter clean
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           flutter clean
           flutter pub get
 
-      # ANALYZE
+      # 11. Analyze
       - name: Flutter analyze
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           flutter analyze || true
 
-      # BUILD APK
+      # 12. Build APK
       - name: Build release APK
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -143,9 +174,10 @@ jobs:
             --release \
             --no-tree-shake-icons
 
-      # CHECK APK
+      # 13. Verify APK
       - name: Verify APK
         working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
         run: |
 
           APK=$(find build/app/outputs/flutter-apk \
@@ -158,12 +190,13 @@ jobs:
             exit 1
           fi
 
-          echo "================================"
-          echo "APK BUILD SUCCESSFUL"
-          echo "================================"
+          echo "======================================"
+          echo "🎉 MACHA MARKET APK SUCCESSFULLY BUILT"
+          echo "======================================"
+
           ls -lh "$APK"
 
-      # UPLOAD APK
+      # 14. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
