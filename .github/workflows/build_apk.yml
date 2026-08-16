@@ -72,10 +72,11 @@ jobs:
               content = re.sub(r"minSdkVersion\s+.*", "minSdkVersion 23", content)
               with open(gpath, "w") as f: f.write(content)
 
-          # 2. Ensure dependencies exist in pubspec.yaml
+          # 2. Add dependencies safely
           if os.path.exists("pubspec.yaml"):
               with open("pubspec.yaml", "r") as f: pcontent = f.read()
               deps = [
+                  "google_fonts: ^6.1.0",
                   "flutter_riverpod: ^2.5.1",
                   "firebase_storage: ^12.0.0",
                   "go_router: ^14.2.0",
@@ -84,11 +85,12 @@ jobs:
                   "cached_network_image: ^3.3.1"
               ]
               for dep in deps:
-                  if dep.split(":")[0] not in pcontent:
+                  dep_name = dep.split(":")[0]
+                  if dep_name not in pcontent:
                       pcontent = pcontent.replace("dependencies:", "dependencies:\n  " + dep)
               with open("pubspec.yaml", "w") as f: f.write(pcontent)
 
-          # 3. Add dummy updateUserRole to AuthService to prevent method missing error
+          # 3. Add updateUserRole to AuthService
           auth_path = "lib/services/auth_service.dart"
           if os.path.exists(auth_path):
               with open(auth_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -102,44 +104,29 @@ jobs:
                   with open(auth_path, "w", encoding="utf-8") as f:
                       f.write(acontent)
 
-          # 4. Clean broken text and syntax in home_page.dart
+          # 4. Fix empty Text() calls and imports in home_page.dart
           hp_path = "lib/shared/pages/home_page.dart"
           if os.path.exists(hp_path):
               with open(hp_path, "r", encoding="utf-8", errors="ignore") as f:
-                  lines = f.readlines()
-              
-              clean_lines = []
-              for line in lines:
-                  if "Kama tatizo linaendelea" in line or "deploy Firestore rules" in line or "Angalia intaneti yako" in line:
-                      continue
-                  clean_lines.append(line)
-              
-              hcontent = "".join(clean_lines)
+                  hcontent = f.read()
+              hcontent = re.sub(r"Text\(\s*\)", "Text('')", hcontent)
               with open(hp_path, "w", encoding="utf-8") as f:
                   f.write(hcontent)
 
-          # 5. Inject missing imports across pages
-          def add_import(file_path, import_stmt):
-              if os.path.exists(file_path):
-                  with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                      c = f.read()
-                  if import_stmt not in c:
-                      c = import_stmt + "\n" + c
-                      with open(file_path, "w", encoding="utf-8") as f:
-                          f.write(c)
-
-          add_import("lib/shared/pages/seller_page.dart", "import 'package:go_router/go_router.dart';")
-          add_import("lib/shared/pages/seller_page.dart", "import 'package:image_picker/image_picker.dart';")
-          add_import("lib/services/product_service.dart", "import 'package:firebase_storage/firebase_storage.dart';")
-          add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import 'package:cached_network_image/cached_network_image.dart';")
-          add_import("lib/features/products/presentation/pages/product_detail_page.dart", "import 'package:flutter_riverpod/flutter_riverpod.dart';")
-          add_import("lib/features/products/domain/entities/product_entity.dart", "import 'package:equatable/equatable.dart';")
-          add_import("lib/features/auth/domain/entities/user_entity.dart", "import 'package:equatable/equatable.dart';")
+          # 5. Fix imports in app_theme.dart
+          theme_path = "lib/core/theme/app_theme.dart"
+          if os.path.exists(theme_path):
+              with open(theme_path, "r", encoding="utf-8", errors="ignore") as f:
+                  tcontent = f.read()
+              if "package:google_fonts/google_fonts.dart" not in tcontent:
+                  tcontent = "import 'package:google_fonts/google_fonts.dart';\n" + tcontent
+                  with open(theme_path, "w", encoding="utf-8") as f:
+                      f.write(tcontent)
 
           EOF
           python3 fix_script.py
 
-      - name: Dependencies
+      - name: Get Dependencies
         working-directory: ${{ steps.proj.outputs.dir }}
         run: flutter pub get
 
