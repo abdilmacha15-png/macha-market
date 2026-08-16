@@ -1,4 +1,4 @@
-Name: Build Macha Market APK
+name: Build Macha Market APK
 
 on:
   push:
@@ -11,26 +11,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repository
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Set up Java 17
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 3. Extract the Flutter ZIP
       - name: Unzip Macha Market project
         run: |
           unzip -o macha_market_compile_fix.zip -d extracted
 
-          echo "===== Extracted files ====="
-          find extracted -maxdepth 3 -type f | head -100
+          echo "===== Flutter files ====="
+          find extracted -name pubspec.yaml -type f
 
-      # 4. Automatically find pubspec.yaml
       - name: Find Flutter project
         run: |
           PROJECT_DIR=$(find extracted -name pubspec.yaml -type f -print -quit | xargs dirname)
@@ -40,12 +37,11 @@ jobs:
             exit 1
           fi
 
-          echo "Flutter project found at:"
+          echo "Flutter project:"
           echo "$PROJECT_DIR"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      # 5. Install Flutter
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -53,49 +49,48 @@ jobs:
           channel: stable
           cache: true
 
-      # 6. Check Flutter version
       - name: Flutter version
-        run: |
-          flutter --version
-          flutter doctor -v
+        run: flutter --version
 
-      # 7. Get dependencies
       - name: Get dependencies
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           flutter pub get
 
-      # 8. Analyze project (Warnings won't stop the build)
+      # FIX FIREBASE MIN SDK
+      - name: Fix Android minimum SDK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          echo "===== Searching Android Gradle files ====="
+
+          find android -type f \( -name "*.gradle" -o -name "*.gradle.kts" \) -print
+
+          echo "===== Before fix ====="
+          grep -R "minSdk" android || true
+
+          # Change minSdkVersion 21 -> 23
+          find android -type f -name "*.gradle" -exec sed -i \
+            -E 's/minSdkVersion[[:space:]]+21/minSdkVersion 23/g' {} \;
+
+          # Change minSdk = 21 -> 23
+          find android -type f -name "*.gradle.kts" -exec sed -i \
+            -E 's/minSdk[[:space:]]*=[[:space:]]*21/minSdk = 23/g' {} \;
+
+          echo "===== After fix ====="
+          grep -R "minSdk" android || true
+
       - name: Analyze project
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           flutter analyze || true
 
-      # 9. Force minSdkVersion 23 for Firebase Auth compatibility
-      - name: Force minSdkVersion to 23
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          echo "flutter.minSdkVersion=23" >> android/local.properties
-
-          if [ -f "android/app/build.gradle" ]; then
-            sed -i 's/minSdkVersion.*/minSdkVersion 23/g' android/app/build.gradle
-            sed -i 's/minSdk.*/minSdk 23/g' android/app/build.gradle
-            sed -i 's/flutter.minSdkVersion/23/g' android/app/build.gradle
-          fi
-
-          if [ -f "android/app/build.gradle.kts" ]; then
-            sed -i 's/minSdk.*/minSdk = 23/g' android/app/build.gradle.kts
-            sed -i 's/minSdkVersion.*/minSdkVersion = 23/g' android/app/build.gradle.kts
-            sed -i 's/flutter.minSdkVersion/23/g' android/app/build.gradle.kts
-          fi
-
-      # 10. Build APK
       - name: Build release APK
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
+          flutter clean
+          flutter pub get
           flutter build apk --release --no-tree-shake-icons
 
-      # 11. Verify APK exists
       - name: Verify APK
         run: |
           APK_PATH="${PROJECT_DIR}/build/app/outputs/flutter-apk/app-release.apk"
@@ -106,11 +101,11 @@ jobs:
           fi
 
           echo "===================================="
-          echo "APK BUILD SUCCESSFUL"
+          echo "🎉 APK BUILD SUCCESSFUL"
           echo "===================================="
+
           ls -lh "$APK_PATH"
 
-      # 12. Upload APK artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -118,13 +113,12 @@ jobs:
           path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
-      # 13. Build summary
       - name: Build summary
         run: |
           echo "## 🎉 Macha Market APK" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "✅ Flutter project found" >> "$GITHUB_STEP_SUMMARY"
-          echo "✅ Dependencies installed" >> "$GITHUB_STEP_SUMMARY"
-          echo "✅ minSdkVersion updated to 23" >> "$GITHUB_STEP_SUMMARY"
-          echo "✅ Release APK built" >> "$GITHUB_STEP_SUMMARY"
-          echo "✅ APK uploaded as workflow artifact" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ Project extracted" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ Flutter configured" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ Firebase minSdk fixed to 23" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ APK built successfully" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ APK uploaded" >> "$GITHUB_STEP_SUMMARY"
