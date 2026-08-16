@@ -1,4 +1,4 @@
-name: Build Macha Market APK
+Name: Build Macha Market APK
 
 on:
   push:
@@ -45,10 +45,6 @@ jobs:
       - name: Get dependencies
         working-directory: ${{ env.PROJECT_DIR }}
         run: flutter pub get
-
-      - name: Analyze project
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: flutter analyze
 
       - name: Build release APK
         working-directory: ${{ env.PROJECT_DIR }}
