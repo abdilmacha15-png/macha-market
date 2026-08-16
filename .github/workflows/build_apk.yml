@@ -25,7 +25,7 @@ jobs:
         run: |
           unzip -o macha_market_compile_fix.zip -d extracted
 
-          echo "===== Flutter files ====="
+          echo "===== Searching Flutter project ====="
           find extracted -name pubspec.yaml -type f
 
       - name: Find Flutter project
@@ -33,14 +33,14 @@ jobs:
           PROJECT_DIR=$(find extracted -name pubspec.yaml -type f -print -quit | xargs dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: No Flutter project found."
+            echo "ERROR: Flutter project not found"
             exit 1
           fi
 
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
           echo "Flutter project:"
           echo "$PROJECT_DIR"
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -54,57 +54,113 @@ jobs:
 
       - name: Get dependencies
         working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          flutter pub get
+        run: flutter pub get
 
-      # FIX FIREBASE MIN SDK
-      - name: Fix Android minimum SDK
+      # =====================================================
+      # FIX FIREBASE minSdkVersion 21 -> 23
+      # =====================================================
+
+      - name: Fix Android minSdkVersion
         working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
         run: |
-          echo "===== Searching Android Gradle files ====="
 
-          find android -type f \( -name "*.gradle" -o -name "*.gradle.kts" \) -print
+          echo "===== BEFORE FIX ====="
 
-          echo "===== Before fix ====="
-          grep -R "minSdk" android || true
+          find android -type f \
+            \( -name "*.gradle" -o -name "*.gradle.kts" -o -name "AndroidManifest.xml" \) \
+            -print
 
-          # Change minSdkVersion 21 -> 23
+          echo "===== Searching minSdk ====="
+
+          grep -R -n \
+            -E "minSdkVersion|minSdk|android:minSdkVersion" \
+            android || true
+
+
+          echo "===== FIXING GRADLE ====="
+
+          # Groovy Gradle
           find android -type f -name "*.gradle" -exec sed -i \
-            -E 's/minSdkVersion[[:space:]]+21/minSdkVersion 23/g' {} \;
+            -E 's/minSdkVersion[[:space:]]*21/minSdkVersion 23/g' {} \;
 
-          # Change minSdk = 21 -> 23
+          # Kotlin Gradle
           find android -type f -name "*.gradle.kts" -exec sed -i \
             -E 's/minSdk[[:space:]]*=[[:space:]]*21/minSdk = 23/g' {} \;
 
-          echo "===== After fix ====="
-          grep -R "minSdk" android || true
+
+          echo "===== FIXING ANDROID MANIFEST ====="
+
+          # AndroidManifest.xml
+          find android -type f -name "AndroidManifest.xml" -exec sed -i \
+            -E 's/android:minSdkVersion="21"/android:minSdkVersion="23"/g' {} \;
+
+          find android -type f -name "AndroidManifest.xml" -exec sed -i \
+            -E "s/android:minSdkVersion='21'/android:minSdkVersion='23'/g" {} \;
+
+
+          echo "===== AFTER FIX ====="
+
+          grep -R -n \
+            -E "minSdkVersion|minSdk|android:minSdkVersion" \
+            android || true
+
+
+      # =====================================================
+      # ANALYZE
+      # =====================================================
 
       - name: Analyze project
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           flutter analyze || true
 
-      - name: Build release APK
+
+      # =====================================================
+      # CLEAN
+      # =====================================================
+
+      - name: Flutter clean
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           flutter clean
           flutter pub get
+
+
+      # =====================================================
+      # BUILD APK
+      # =====================================================
+
+      - name: Build release APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
           flutter build apk --release --no-tree-shake-icons
+
+
+      # =====================================================
+      # VERIFY APK
+      # =====================================================
 
       - name: Verify APK
         run: |
+
           APK_PATH="${PROJECT_DIR}/build/app/outputs/flutter-apk/app-release.apk"
 
           if [ ! -f "$APK_PATH" ]; then
-            echo "ERROR: APK was not created."
+            echo "❌ APK NOT FOUND"
             exit 1
           fi
 
-          echo "===================================="
-          echo "🎉 APK BUILD SUCCESSFUL"
-          echo "===================================="
+          echo "======================================"
+          echo "🎉 MACHА MARKET APK SUCCESSFULLY BUILT"
+          echo "======================================"
 
           ls -lh "$APK_PATH"
+
+
+      # =====================================================
+      # UPLOAD APK
+      # =====================================================
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -113,12 +169,18 @@ jobs:
           path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
+
+      # =====================================================
+      # SUMMARY
+      # =====================================================
+
       - name: Build summary
         run: |
+
           echo "## 🎉 Macha Market APK" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "✅ Project extracted" >> "$GITHUB_STEP_SUMMARY"
-          echo "✅ Flutter configured" >> "$GITHUB_STEP_SUMMARY"
-          echo "✅ Firebase minSdk fixed to 23" >> "$GITHUB_STEP_SUMMARY"
-          echo "✅ APK built successfully" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ Flutter project found" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ Dependencies installed" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ Firebase minSdk fixed" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ APK built" >> "$GITHUB_STEP_SUMMARY"
           echo "✅ APK uploaded" >> "$GITHUB_STEP_SUMMARY"
