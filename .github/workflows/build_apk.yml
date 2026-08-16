@@ -11,65 +11,62 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repository
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Java 17 (Bila gradle cache ili isikwame kwenye ZIP)
       - name: Set up Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
-      # 3. Find and unzip Macha Market
-      - name: Unzip Macha Market project
+      # UNZIP THE NEW PROJECT
+      - name: Unzip Macha Market
         shell: bash
         run: |
           set -e
 
-          echo "Checking repository..."
-          ls -la
+          ZIP_FILE="macha_market_storage_fix.zip"
 
-          ZIP_FILE=$(find . -maxdepth 2 -type f -iname "*.zip" | head -n 1 || true)
-
-          if [ -n "$ZIP_FILE" ]; then
-            echo "Found ZIP: $ZIP_FILE"
-
-            mkdir -p extracted_macha
-            unzip -o "$ZIP_FILE" -d extracted_macha
-
-            echo "Extracted files:"
-            find extracted_macha -maxdepth 3 -type f | head -100
-          else
-            echo "No ZIP found. Using repository directly."
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: $ZIP_FILE not found"
+            exit 1
           fi
 
-      # 4. Find Flutter project
+          rm -rf extracted
+          mkdir -p extracted
+
+          unzip -o "$ZIP_FILE" -d extracted
+
+          echo "===== EXTRACTED PROJECT ====="
+          find extracted -maxdepth 3 -name "pubspec.yaml" -print
+
+      # FIND pubspec.yaml
       - name: Find Flutter project
         shell: bash
         run: |
           set -e
 
-          FLUTTER_DIR=$(find . \
-            -name pubspec.yaml \
-            -not -path "*/.dart_tool/*" \
-            -not -path "*/build/*" \
-            -print \
-            | head -n 1 \
-            | xargs -r dirname)
+          PUBSPEC=$(find extracted \
+            -type f \
+            -name "pubspec.yaml" \
+            -print -quit)
 
-          if [ -z "$FLUTTER_DIR" ]; then
-            echo "ERROR: No Flutter project found."
+          if [ -z "$PUBSPEC" ]; then
+            echo "ERROR: No Flutter project found"
             exit 1
           fi
 
-          echo "Flutter project found at:"
-          echo "$FLUTTER_DIR"
+          PROJECT_DIR=$(dirname "$PUBSPEC")
 
-          echo "FLUTTER_DIR=$FLUTTER_DIR" >> "$GITHUB_ENV"
+          echo "Flutter project:"
+          echo "$PROJECT_DIR"
 
-      # 5. Flutter
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      # FLUTTER
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -77,134 +74,99 @@ jobs:
           channel: stable
           cache: true
 
-      # 6. Flutter version
       - name: Flutter version
-        run: |
-          flutter --version
-          dart --version
+        run: flutter --version
 
-      # 7. Get dependencies
-      - name: Get dependencies
-        working-directory: ${{ env.FLUTTER_DIR }}
-        run: |
-          flutter pub get
+      # DEPENDENCIES
+      - name: Flutter pub get
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: flutter pub get
 
-      # 8. FIX Firebase minSdk 23
+      # FIX FIREBASE MIN SDK
       - name: Fix Android minSdkVersion
-        working-directory: ${{ env.FLUTTER_DIR }}
+        working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
-          set -e
 
-          echo "Searching Android Gradle files..."
+          echo "===== BEFORE ====="
+          grep -R -n -E \
+            "minSdkVersion|minSdk|flutter.minSdkVersion" \
+            android || true
 
-          find android -type f \( \
-            -name "build.gradle" -o \
-            -name "build.gradle.kts" \
-          \) -print
+          # Groovy Gradle
+          find android -type f -name "*.gradle" -exec sed -i \
+            -E 's/minSdkVersion[[:space:]]*flutter\.minSdkVersion/minSdkVersion 23/g' {} \;
 
-          # build.gradle
-          if [ -f "android/app/build.gradle" ]; then
-            echo "Fixing android/app/build.gradle"
+          find android -type f -name "*.gradle" -exec sed -i \
+            -E 's/minSdkVersion[[:space:]]*21/minSdkVersion 23/g' {} \;
 
-            sed -i \
-              -E 's/minSdkVersion[[:space:]]+[0-9]+/minSdkVersion 23/g' \
-              android/app/build.gradle
+          find android -type f -name "*.gradle" -exec sed -i \
+            -E 's/minSdk[[:space:]]*=[[:space:]]*flutter\.minSdkVersion/minSdk = 23/g' {} \;
 
-            sed -i \
-              -E 's/minSdkVersion[[:space:]]+flutter\.minSdkVersion/minSdkVersion 23/g' \
-              android/app/build.gradle
-          fi
+          find android -type f -name "*.gradle" -exec sed -i \
+            -E 's/minSdk[[:space:]]*=[[:space:]]*21/minSdk = 23/g' {} \;
 
-          # build.gradle.kts
-          if [ -f "android/app/build.gradle.kts" ]; then
-            echo "Fixing android/app/build.gradle.kts"
+          # Kotlin Gradle
+          find android -type f -name "*.gradle.kts" -exec sed -i \
+            -E 's/minSdk[[:space:]]*=[[:space:]]*flutter\.minSdkVersion/minSdk = 23/g' {} \;
 
-            sed -i \
-              -E 's/minSdk[[:space:]]*=[[:space:]]*[0-9]+/minSdk = 23/g' \
-              android/app/build.gradle.kts
+          find android -type f -name "*.gradle.kts" -exec sed -i \
+            -E 's/minSdk[[:space:]]*=[[:space:]]*21/minSdk = 23/g' {} \;
 
-            sed -i \
-              -E 's/minSdk[[:space:]]*=[[:space:]]*flutter\.minSdkVersion/minSdk = 23/g' \
-              android/app/build.gradle.kts
-          fi
+          # Manifest
+          find android -type f -name "AndroidManifest.xml" -exec sed -i \
+            -E 's/android:minSdkVersion="21"/android:minSdkVersion="23"/g' {} \;
 
-          echo "Checking minSdk configuration..."
+          echo "===== AFTER ====="
+          grep -R -n -E \
+            "minSdkVersion|minSdk|flutter.minSdkVersion" \
+            android || true
 
-          grep -Rni \
-            "minSdk" \
-            android/app \
-            --include="*.gradle" \
-            --include="*.gradle.kts" \
-            || true
-
-      # 9. Clean
+      # CLEAN
       - name: Flutter clean
-        working-directory: ${{ env.FLUTTER_DIR }}
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
           flutter clean
           flutter pub get
 
-      # 10. Analyze - DO NOT stop build because of warnings
-      - name: Analyze project
-        working-directory: ${{ env.FLUTTER_DIR }}
-        shell: bash
+      # ANALYZE
+      - name: Flutter analyze
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
           flutter analyze || true
 
-      # 11. Build APK
+      # BUILD APK
       - name: Build release APK
-        working-directory: ${{ env.FLUTTER_DIR }}
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
           flutter build apk \
             --release \
             --no-tree-shake-icons
 
-      # 12. Verify APK exists
+      # CHECK APK
       - name: Verify APK
-        working-directory: ${{ env.FLUTTER_DIR }}
-        shell: bash
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          set -e
-
-          echo "Looking for APK..."
-
-          find build/app/outputs/flutter-apk \
-            -type f \
-            -name "*.apk" \
-            -print
 
           APK=$(find build/app/outputs/flutter-apk \
             -type f \
             -name "*.apk" \
-            | head -n 1)
+            -print -quit)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK was not created."
+            echo "ERROR: APK was not created"
             exit 1
           fi
 
-          echo "APK FOUND:"
-          echo "$APK"
+          echo "================================"
+          echo "APK BUILD SUCCESSFUL"
+          echo "================================"
+          ls -lh "$APK"
 
-      # 13. Upload APK
+      # UPLOAD APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: macha-market-release-apk
-          path: |
-            ${{ env.FLUTTER_DIR }}/build/app/outputs/flutter-apk/*.apk
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
-
-      # 14. Build summary
-      - name: Build summary
-        if: always()
-        run: |
-          echo "===================================="
-          echo "       MACHA MARKET BUILD"
-          echo "===================================="
-          echo "Flutter: 3.27.0"
-          echo "Java: 17"
-          echo "Android minSdk: 23"
-          echo "APK build process completed."
-          echo "===================================="
