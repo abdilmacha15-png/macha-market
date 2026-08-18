@@ -31,13 +31,13 @@ jobs:
           channel: stable
           cache: true
 
-      # 4. Find and Unzip Project
+      # 4. Find and Unzip Any ZIP File
       - name: Find and Unzip Project
         shell: bash
         run: |
           set -e
 
-          echo "===== Tafuta ZIP file ====="
+          echo "===== Searching for ZIP file ====="
           ZIP_FILE=$(find . -maxdepth 3 -type f -name "*.zip" -print -quit)
 
           if [ -z "$ZIP_FILE" ]; then
@@ -45,15 +45,15 @@ jobs:
             exit 1
           fi
 
-          echo "ZIP Imepatikana: $ZIP_FILE"
+          echo "ZIP Found: $ZIP_FILE"
           
           rm -rf extracted
           mkdir -p extracted
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "===== ZIP Imefunguliwa Kikamilifu ====="
+          echo "===== ZIP Extracted Successfully ====="
 
-      # 5. Locate Flutter Project
+      # 5. Locate Flutter Project Directory
       - name: Locate Flutter Project Directory
         shell: bash
         run: |
@@ -89,14 +89,14 @@ jobs:
         run: |
           flutter pub get
 
-      # 8. Rekebisha Android SDK Versions (compileSdk 35, targetSdk 35, minSdk 23)
+      # 8. Upgrade Android SDK Versions (compileSdk 35, targetSdk 35, minSdk 23)
       - name: Upgrade Android SDK Versions
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
           echo "===== UPDATING ANDROID SDK VERSIONS TO 35 ====="
 
-          # Update compileSdkVersion / compileSdk to 35
+          # Update compileSdk to 35
           find android -type f -name "*.gradle*" -exec sed -i \
             -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 35/g' {} + || true
 
@@ -106,14 +106,14 @@ jobs:
           find android -type f -name "*.gradle*" -exec sed -i \
             -E 's/compileSdk[[:space:]]+flutter\.compileSdkVersion/compileSdk 35/g' {} + || true
 
-          # Update targetSdkVersion / targetSdk to 35
+          # Update targetSdk to 35
           find android -type f -name "*.gradle*" -exec sed -i \
             -E 's/targetSdkVersion[[:space:]]+[0-9]+/targetSdkVersion 35/g' {} + || true
 
           find android -type f -name "*.gradle*" -exec sed -i \
             -E 's/targetSdk[[:space:]]*=[[:space:]]*[0-9]+/targetSdk = 35/g' {} + || true
 
-          # Update minSdkVersion / minSdk to 23
+          # Update minSdk to 23
           find android -type f -name "*.gradle*" -exec sed -i \
             -E 's/minSdkVersion[[:space:]]+flutter\.minSdkVersion/minSdkVersion 23/g' {} + || true
 
