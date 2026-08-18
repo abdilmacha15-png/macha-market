@@ -31,13 +31,13 @@ jobs:
           channel: stable
           cache: true
 
-      # 4. Find and Unzip Any ZIP File
+      # 4. Tafuta na Unzip faili la ZIP
       - name: Find and Unzip Project
         shell: bash
         run: |
           set -e
 
-          echo "===== Searching for ZIP file ====="
+          echo "===== Tafuta ZIP file ====="
           ZIP_FILE=$(find . -maxdepth 3 -type f -name "*.zip" -print -quit)
 
           if [ -z "$ZIP_FILE" ]; then
@@ -45,15 +45,15 @@ jobs:
             exit 1
           fi
 
-          echo "ZIP Found: $ZIP_FILE"
+          echo "ZIP Imepatikana: $ZIP_FILE"
           
           rm -rf extracted
           mkdir -p extracted
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "===== ZIP Extracted Successfully ====="
+          echo "===== ZIP Imefunguliwa Kikamilifu ====="
 
-      # 5. Locate Flutter Project Directory
+      # 5. Tambua folda ya mradi (Tafuta pubspec.yaml na folda ya android/)
       - name: Locate Flutter Project Directory
         shell: bash
         run: |
@@ -76,7 +76,7 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      # 6. Check Environment Versions
+      # 6. Angalia Version za Mfumo
       - name: Check Environment Versions
         run: |
           flutter --version
@@ -89,44 +89,41 @@ jobs:
         run: |
           flutter pub get
 
-      # 8. Upgrade Android SDK Versions (compileSdk 35, targetSdk 35, minSdk 23)
-      - name: Upgrade Android SDK Versions
+      # 8. Lazimisha compileSdk 35 na minSdkVersion 23
+      - name: Force Android SDK Versions
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
-          echo "===== UPDATING ANDROID SDK VERSIONS TO 35 ====="
+          echo "===== LAZIMISHA SDK 35 NA MIN SDK 23 ====="
 
-          # Update compileSdk to 35
-          find android -type f -name "*.gradle*" -exec sed -i \
-            -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 35/g' {} + || true
+          # Weka subprojects block ndani ya build.gradle
+          cat << 'EOF' >> android/build.gradle
 
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileSdkVersion 35
+                          defaultConfig {
+                              minSdkVersion 23
+                              targetSdkVersion 35
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
+
+          # Badilisha pia faili za app/build.gradle moja kwa moja
           find android -type f -name "*.gradle*" -exec sed -i \
             -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 35/g' {} + || true
 
           find android -type f -name "*.gradle*" -exec sed -i \
-            -E 's/compileSdk[[:space:]]+flutter\.compileSdkVersion/compileSdk 35/g' {} + || true
+            -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 35/g' {} + || true
 
-          # Update targetSdk to 35
-          find android -type f -name "*.gradle*" -exec sed -i \
-            -E 's/targetSdkVersion[[:space:]]+[0-9]+/targetSdkVersion 35/g' {} + || true
-
-          find android -type f -name "*.gradle*" -exec sed -i \
-            -E 's/targetSdk[[:space:]]*=[[:space:]]*[0-9]+/targetSdk = 35/g' {} + || true
-
-          # Update minSdk to 23
           find android -type f -name "*.gradle*" -exec sed -i \
             -E 's/minSdkVersion[[:space:]]+flutter\.minSdkVersion/minSdkVersion 23/g' {} + || true
 
-          find android -type f -name "*.gradle*" -exec sed -i \
-            -E 's/minSdkVersion[[:space:]]+[0-9]+/minSdkVersion 23/g' {} + || true
-
-          find android -type f -name "*.gradle*" -exec sed -i \
-            -E 's/minSdk[[:space:]]*=[[:space:]]*flutter\.minSdkVersion/minSdk = 23/g' {} + || true
-
-          find android -type f -name "*.gradle*" -exec sed -i \
-            -E 's/minSdk[[:space:]]*=[[:space:]]*[0-9]+/minSdk = 23/g' {} + || true
-
-          # AndroidManifest.xml
           find android -type f -name "AndroidManifest.xml" -exec sed -i \
             -E 's/android:minSdkVersion="[0-9]+"/android:minSdkVersion="23"/g' {} + || true
 
@@ -145,7 +142,7 @@ jobs:
             --release \
             --no-tree-shake-icons
 
-      # 11. Verify APK
+      # 11. Uhakiki wa APK
       - name: Verify APK Generation
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
