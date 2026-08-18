@@ -31,7 +31,7 @@ jobs:
           channel: stable
           cache: true
 
-      # 4. Tafuta na Unzip faili la Macha Market ZIP
+      # 4. Find and Unzip Project
       - name: Find and Unzip Project
         shell: bash
         run: |
@@ -53,7 +53,7 @@ jobs:
 
           echo "===== ZIP Imefunguliwa Kikamilifu ====="
 
-      # 5. Tambua folda ya mradi (Tafuta pubspec.yaml ndani ya extracted)
+      # 5. Locate Flutter Project
       - name: Locate Flutter Project Directory
         shell: bash
         run: |
@@ -76,7 +76,7 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      # 6. Angalia Version za Mfumo
+      # 6. Check Environment Versions
       - name: Check Environment Versions
         run: |
           flutter --version
@@ -89,33 +89,46 @@ jobs:
         run: |
           flutter pub get
 
-      # 8. Rekebisha minSdkVersion kuwa 23
-      - name: Fix Android minSdkVersion
+      # 8. Rekebisha Android SDK Versions (compileSdk 35, targetSdk 35, minSdk 23)
+      - name: Upgrade Android SDK Versions
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
-          echo "===== APPLYING MIN SDK 23 ====="
+          echo "===== UPDATING ANDROID SDK VERSIONS TO 35 ====="
 
-          find android -type f -name "*.gradle" -exec sed -i \
-            -E 's/minSdkVersion[[:space:]]*flutter\.minSdkVersion/minSdkVersion 23/g' {} + || true
+          # Update compileSdkVersion / compileSdk to 35
+          find android -type f -name "*.gradle*" -exec sed -i \
+            -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 35/g' {} + || true
 
-          find android -type f -name "*.gradle" -exec sed -i \
-            -E 's/minSdkVersion[[:space:]]*21/minSdkVersion 23/g' {} + || true
+          find android -type f -name "*.gradle*" -exec sed -i \
+            -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 35/g' {} + || true
 
-          find android -type f -name "*.gradle" -exec sed -i \
+          find android -type f -name "*.gradle*" -exec sed -i \
+            -E 's/compileSdk[[:space:]]+flutter\.compileSdkVersion/compileSdk 35/g' {} + || true
+
+          # Update targetSdkVersion / targetSdk to 35
+          find android -type f -name "*.gradle*" -exec sed -i \
+            -E 's/targetSdkVersion[[:space:]]+[0-9]+/targetSdkVersion 35/g' {} + || true
+
+          find android -type f -name "*.gradle*" -exec sed -i \
+            -E 's/targetSdk[[:space:]]*=[[:space:]]*[0-9]+/targetSdk = 35/g' {} + || true
+
+          # Update minSdkVersion / minSdk to 23
+          find android -type f -name "*.gradle*" -exec sed -i \
+            -E 's/minSdkVersion[[:space:]]+flutter\.minSdkVersion/minSdkVersion 23/g' {} + || true
+
+          find android -type f -name "*.gradle*" -exec sed -i \
+            -E 's/minSdkVersion[[:space:]]+[0-9]+/minSdkVersion 23/g' {} + || true
+
+          find android -type f -name "*.gradle*" -exec sed -i \
             -E 's/minSdk[[:space:]]*=[[:space:]]*flutter\.minSdkVersion/minSdk = 23/g' {} + || true
 
-          find android -type f -name "*.gradle" -exec sed -i \
-            -E 's/minSdk[[:space:]]*=[[:space:]]*21/minSdk = 23/g' {} + || true
+          find android -type f -name "*.gradle*" -exec sed -i \
+            -E 's/minSdk[[:space:]]*=[[:space:]]*[0-9]+/minSdk = 23/g' {} + || true
 
-          find android -type f -name "*.gradle.kts" -exec sed -i \
-            -E 's/minSdk[[:space:]]*=[[:space:]]*flutter\.minSdkVersion/minSdk = 23/g' {} + || true
-
-          find android -type f -name "*.gradle.kts" -exec sed -i \
-            -E 's/minSdk[[:space:]]*=[[:space:]]*21/minSdk = 23/g' {} + || true
-
+          # AndroidManifest.xml
           find android -type f -name "AndroidManifest.xml" -exec sed -i \
-            -E 's/android:minSdkVersion="21"/android:minSdkVersion="23"/g' {} + || true
+            -E 's/android:minSdkVersion="[0-9]+"/android:minSdkVersion="23"/g' {} + || true
 
       # 9. Clean Project
       - name: Flutter clean
@@ -132,7 +145,7 @@ jobs:
             --release \
             --no-tree-shake-icons
 
-      # 11. Uhakiki wa APK
+      # 11. Verify APK
       - name: Verify APK Generation
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
