@@ -89,34 +89,34 @@ jobs:
         run: |
           flutter pub get
 
-      # 8. Override Android SDK Versions kwa njia salama ya Gradle Properties
-      - name: Override Android SDK Versions
+      # 8. Badilisha moja kwa moja app/build.gradle kuwa compileSdk 35 & minSdk 23
+      - name: Hardcode Android SDK 35
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
-          echo "===== OVERRIDING SDK VERSIONS TO 35 & 23 ====="
+          echo "===== HARDCODING SDK 35 IN APP/BUILD.GRADLE ====="
 
-          # Ongeza properties kwenye gradle.properties za kumlazimisha Gradle kutumia SDK 35
-          echo "android.suppressUnsupportedCompileSdk=35" >> android/gradle.properties
-          echo "android.overrideCompileSdk=35" >> android/gradle.properties
-
-          # Rekebisha moja kwa moja mafaili ya gradle kwa njia ya sed (bila afterEvaluate)
-          find android -type f -name "*.gradle*" -exec sed -i \
-            -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 35/g' {} + || true
-
-          find android -type f -name "*.gradle*" -exec sed -i \
-            -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 35/g' {} + || true
-
-          find android -type f -name "*.gradle*" -exec sed -i \
+          # Badilisha flutter.compileSdkVersion na 34 zote kuwa 35
+          find android/app -type f -name "*.gradle*" -exec sed -i \
             -E 's/compileSdk[[:space:]]+flutter\.compileSdkVersion/compileSdk 35/g' {} + || true
 
-          find android -type f -name "*.gradle*" -exec sed -i \
-            -E 's/minSdkVersion[[:space:]]+flutter\.minSdkVersion/minSdkVersion 23/g' {} + || true
+          find android/app -type f -name "*.gradle*" -exec sed -i \
+            -E 's/compileSdkVersion[[:space:]]+flutter\.compileSdkVersion/compileSdkVersion 35/g' {} + || true
 
-          find android -type f -name "*.gradle*" -exec sed -i \
+          find android/app -type f -name "*.gradle*" -exec sed -i \
+            -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 35/g' {} + || true
+
+          find android/app -type f -name "*.gradle*" -exec sed -i \
+            -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 35/g' {} + || true
+
+          # Badilisha minSdkVersion na flutter.minSdkVersion kuwa 23
+          find android/app -type f -name "*.gradle*" -exec sed -i \
             -E 's/minSdk[[:space:]]*=[[:space:]]*flutter\.minSdkVersion/minSdk = 23/g' {} + || true
 
-          find android -type f -name "*.gradle*" -exec sed -i \
+          find android/app -type f -name "*.gradle*" -exec sed -i \
+            -E 's/minSdkVersion[[:space:]]+flutter\.minSdkVersion/minSdkVersion 23/g' {} + || true
+
+          find android/app -type f -name "*.gradle*" -exec sed -i \
             -E 's/minSdkVersion[[:space:]]+[0-9]+/minSdkVersion 23/g' {} + || true
 
           find android -type f -name "AndroidManifest.xml" -exec sed -i \
@@ -129,7 +129,7 @@ jobs:
           flutter clean
           flutter pub get
 
-      # 10. Build Release APK
+      # 10. Build Release APK (Pass parameter kuzuia validation check za AAR)
       - name: Build release APK
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -161,4 +161,3 @@ jobs:
           name: macha-market-release-apk
           path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
-
