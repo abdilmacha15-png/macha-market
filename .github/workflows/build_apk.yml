@@ -5,6 +5,7 @@ on:
     branches:
       - main
   workflow_dispatch:
+
 permissions:
   contents: read
 
@@ -15,59 +16,40 @@ jobs:
     timeout-minutes: 30
 
     steps:
-
-      # ----------------------------------------------------------
-      # 1. Checkout repository
-      # ----------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ----------------------------------------------------------
-      # 2. Locate Flutter project BEFORE doing Gradle operations
-      # ----------------------------------------------------------
-      - name: Locate Flutter project
-        id: locate
+      - name: Find Flutter project
         shell: bash
         run: |
           set -e
 
           echo "Searching for pubspec.yaml..."
 
+          PROJECT_DIR=""
+
           if [ -f "pubspec.yaml" ]; then
             PROJECT_DIR="."
-          elif [ -f "macha_market/pubspec.yaml" ]; then
-            PROJECT_DIR="macha_market"
           else
-            PROJECT_DIR=$(find . \
-              -maxdepth 5 \
-              -type f \
-              -name "pubspec.yaml" \
-              -not -path "./.git/*" \
-              -print -quit \
-              | xargs -r dirname)
+            PROJECT_DIR=$(find . -maxdepth 6 -type f -name "pubspec.yaml" \
+              -not -path "./.git/*" -print -quit | xargs -r dirname)
           fi
 
           if [ -z "$PROJECT_DIR" ]; then
             echo "ERROR: pubspec.yaml not found."
-            echo "Repository structure:"
             find . -maxdepth 5 -type f | head -200
             exit 1
           fi
 
           if [ ! -d "$PROJECT_DIR/android" ]; then
-            echo "ERROR: android directory not found."
-            echo "Project directory: $PROJECT_DIR"
+            echo "ERROR: android folder not found."
+            echo "Project: $PROJECT_DIR"
             exit 1
           fi
 
-          echo "Flutter project found:"
-          echo "$PROJECT_DIR"
-
+          echo "Flutter project found: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      # ----------------------------------------------------------
-      # 3. Verify project structure
-      # ----------------------------------------------------------
       - name: Verify Flutter project
         shell: bash
         run: |
@@ -75,45 +57,21 @@ jobs:
 
           cd "$PROJECT_DIR"
 
-          echo "======================================"
-          echo "Flutter project"
-          echo "======================================"
+          test -f pubspec.yaml
+          test -d android
 
+          echo "Flutter project:"
           pwd
 
-          echo ""
-          echo "pubspec.yaml:"
-          test -f pubspec.yaml
-          echo "OK"
+          echo "pubspec.yaml: OK"
+          echo "android/: OK"
 
-          echo ""
-          echo "android/:"
-          test -d android
-          echo "OK"
-
-          echo ""
-          echo "Gradle files:"
-          find android \
-            -type f \
-            \( -name "*.gradle" -o -name "*.gradle.kts" \) \
-            -print
-
-      # ----------------------------------------------------------
-      # 4. Java 17
-      #
-      # IMPORTANT:
-      # No cache: gradle here.
-      # This prevents the previous "No file matched" error.
-      # ----------------------------------------------------------
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
-      # ----------------------------------------------------------
-      # 5. Flutter
-      # ----------------------------------------------------------
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -121,19 +79,13 @@ jobs:
           channel: stable
           cache: true
 
-      # ----------------------------------------------------------
-      # 6. Show versions
-      # ----------------------------------------------------------
       - name: Show versions
         run: |
           flutter --version
           dart --version
           java -version
 
-      # ----------------------------------------------------------
-      # 7. Fix Firebase minimum SDK
-      # ----------------------------------------------------------
-      - name: Ensure Android minSdkVersion is 23
+      - name: Ensure minSdkVersion 23
         shell: bash
         run: |
           set -e
@@ -163,7 +115,7 @@ text = text.replace(
 )
 
 path.write_text(text)
-print("Updated android/app/build.gradle")
+print("minSdkVersion updated.")
 PY
           fi
 
@@ -180,62 +132,31 @@ text = text.replace(
 )
 
 path.write_text(text)
-print("Updated android/app/build.gradle.kts")
+print("minSdk updated.")
 PY
           fi
 
-          echo ""
-          echo "Current minSdk configuration:"
-          grep -Rni "minSdk" android \
-            --include="*.gradle" \
-            --include="*.gradle.kts" \
-            || true
-
-      # ----------------------------------------------------------
-      # 8. Flutter dependencies
-      # ----------------------------------------------------------
-      - name: Flutter pub get
+      - name: Get Flutter dependencies
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
-
           flutter pub get
 
-      # ----------------------------------------------------------
-      # 9. Analyze
-      #
-      # Analyzer warnings must not prevent APK build.
-      # ----------------------------------------------------------
-      - name: Flutter analyze
+      - name: Analyze Flutter project
         shell: bash
         run: |
           cd "$PROJECT_DIR"
+          flutter analyze || true
 
-          flutter analyze || {
-            STATUS=$?
-
-            echo "Flutter analyze returned: $STATUS"
-            echo "Continuing to release build..."
-          }
-
-      # ----------------------------------------------------------
-      # 10. Clean
-      # ----------------------------------------------------------
-      - name: Flutter clean
+      - name: Clean Flutter project
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
-
           flutter clean
           flutter pub get
 
-      # ----------------------------------------------------------
-      # 11. Build release APK
-      # ----------------------------------------------------------
       - name: Build release APK
         shell: bash
         run: |
@@ -251,9 +172,6 @@ PY
             --release \
             --no-tree-shake-icons
 
-      # ----------------------------------------------------------
-      # 12. Verify APK
-      # ----------------------------------------------------------
       - name: Verify APK
         shell: bash
         run: |
@@ -262,12 +180,6 @@ PY
           APK_DIR="$PROJECT_DIR/build/app/outputs/flutter-apk"
 
           echo "Searching for APK..."
-
-          find "$APK_DIR" \
-            -maxdepth 1 \
-            -type f \
-            -name "*.apk" \
-            -print
 
           APK=$(find "$APK_DIR" \
             -maxdepth 1 \
@@ -280,16 +192,12 @@ PY
             exit 1
           fi
 
-          echo ""
           echo "======================================"
           echo "APK GENERATED SUCCESSFULLY"
           echo "======================================"
 
           ls -lh "$APK"
 
-      # ----------------------------------------------------------
-      # 13. Upload APK
-      # ----------------------------------------------------------
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -298,17 +206,12 @@ PY
           if-no-files-found: error
           retention-days: 30
 
-      # ----------------------------------------------------------
-      # 14. Summary
-      # ----------------------------------------------------------
       - name: Build summary
         run: |
           echo "======================================"
-          echo "       MACHA MARKET BUILD"
+          echo "Macha Market APK Build Completed"
           echo "======================================"
           echo "Flutter: 3.24.0"
           echo "Java: 17"
           echo "minSdkVersion: 23"
-          echo ""
-          echo "RELEASE APK BUILD COMPLETED."
-          echo "======================================"
+          echo "APK uploaded as workflow artifact."
